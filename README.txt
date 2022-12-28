@@ -21,3 +21,5 @@ Ander Biguri (2022). Perceptually uniform colormaps (https://www.mathworks.com/m
 Kringing:
 Wolfgang Schwangart (2010). https://github.com/wschwanghart/kriging
 
+Other Reference:
+Grosse, P., De Vries, B. V. W., Euillades, P. A., Kervyn, M., & Petrinovic, I. A. (2012). Systematic morphometric characterization of volcanic edifices using digital elevation models. Geomorphology, 136(1), 114-131.
