@@ -18,8 +18,9 @@ Francois Beauducel (2015). https://github.com/IPGP/mapping-lib/blob/master/latlo
 viridis:
 Ander Biguri (2022). Perceptually uniform colormaps (https://www.mathworks.com/matlabcentral/fileexchange/51986-perceptually-uniform-colormaps), MATLAB Central File Exchange. Retrieved December 28, 2022.
 
+bluewhitered:
+Nathan Childress (2023). bluewhitered (https://www.mathworks.com/matlabcentral/fileexchange/4058-bluewhitered), MATLAB Central File Exchange. Retrieved May 15, 2023.
+
 Kringing:
 Wolfgang Schwangart (2010). https://github.com/wschwanghart/kriging
 
-Other Reference:
-Grosse, P., De Vries, B. V. W., Euillades, P. A., Kervyn, M., & Petrinovic, I. A. (2012). Systematic morphometric characterization of volcanic edifices using digital elevation models. Geomorphology, 136(1), 114-131.
