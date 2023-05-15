@@ -96,7 +96,7 @@ else
         %   contour.
         
         ccI = contourc(Z,[conts(i),conts(i)]);
-        ccI = Convert_Contours(ccI);
+        ccI = Convert_Contours(ccI,0);
         
         ss = S;
         ss(Z<=conts(i-1)) = NaN;
@@ -112,8 +112,8 @@ else
     if summitRegion == 2 && sum(meanS_multiBW(:,2)) > 0
         ii = find(meanS_multiBW(:,2)==1);
     else
-        tt = gradient(atand(meanS_multiBW(:,1)),conts(2)-conts(1));
-        ii = find(tt==min(tt),1);
+        tt = gradient(atand(meanS_multiBW(:,1)),conts(2,1)-conts(1,1));
+        ii = find(tt==min(tt(2:end)),1);
     end
     
     summitCont = conts(ii,1);

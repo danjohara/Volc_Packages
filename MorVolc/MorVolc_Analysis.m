@@ -2,6 +2,7 @@ function morRes = MorVolc_Analysis(pack)
 %%
 % Name: MorVolc_Analysis
 % Author: Daniel O'Hara
+% Original MorVolc Author: Pablo Grosse
 % Date: 02/24/2021 (mm/dd/yyyy)
 % Description: Script to calculate the MorVolc statistics of an edifice 
 %   (Grosse et al., 2009, 2012).  
@@ -342,6 +343,8 @@ if ischar(craterXYZ)
         
         craterXYZ = [craterXYZ;{double(txyz)}];
     end
+elseif ~isempty(craterXYZ) && ~iscell(craterXYZ)
+    craterXYZ = {craterXYZ};
 end
 
 % If mask given as shapefile, convert to array
@@ -462,8 +465,10 @@ disp('Determing contours and lower flank boundary...')
 
 if length(contIter) == 1
     if contIter < 0 && contIter > -1
+%         trueCont = abs(contIter)*range(Z(:));
         trueCont = round(abs(contIter)*range(Z(:)),0);
     else
+%         trueCont = contIter;
         trueCont = round(contIter,0);
     end
 
@@ -749,9 +754,10 @@ morRes.SizeParams.Volume = volcVols;
 morRes.SizeParams.Maximum_Volume = maxVol;
 
 % Eroded Volume
-[cont_area_convHullArea,volumeDiff] = CalculateErodedVolume(X,Y,Z,trueCont,min(boundaryXYZ(:,3)),1);
+[cont_area_convHullArea,volumeDiff,ConvZ] = CalculateErodedVolume(X,Y,Z,trueCont,min(boundaryXYZ(:,3)),1,1);
 morRes.SizeParams.Minimum_Eroded_Volume = volumeDiff;
 morRes.SizeParams.Convex_Hull_Areas = cont_area_convHullArea;
+morRes.SizeParams.Convex_Hull_Interpolated_Surface = ConvZ;
 
 %% Collect Orientation Parameters
 disp('Collecting Orientation Parameters...')
@@ -931,9 +937,11 @@ else
         
         % Contour Stats
         if craterContIter < 0 && craterContIter > -1
-            trueCraterCont = round(abs(craterContIter)*range(tmpZ(:)),0);
+%             trueCraterCont = round(abs(craterContIter)*range(tmpZ(:)),0);
+            trueCraterCont = round(abs(craterContIter)*range(tmpZ(:)));
         else
-            trueCraterCont = round(craterContIter,0);
+%             trueCraterCont = round(craterContIter,0);
+            trueCraterCont = round(craterContIter);
         end
         
         tmpConts = round(min(tmpZ(:))):round(min(tmpZ(:)))+trueCraterCont;
@@ -1008,9 +1016,11 @@ end
 disp('Collecting Peak Parameters...')
 
 if peakContIter < 0 && peakContIter > -1
-    truePeakCont = round(abs(peakContIter)*maxHeight,0);
+%     truePeakCont = round(abs(peakContIter)*maxHeight,0);
+    truePeakCont = abs(peakContIter)*maxHeight;
 else
-    truePeakCont = round(peakContIter,0);
+%     truePeakCont = round(peakContIter,0);
+    truePeakCont = peakContIter;
 end
 
 allPeakIJ_cont = [];
@@ -1061,20 +1071,21 @@ morRes.PeakParams.Summit_Local_Peak_Count = nansum(lM3_summit(:));
 morRes.PeakParams.Main_Flank_Local_Peak_Count = nansum(lM3_lFlank(:))-nansum(lM3_summit(:));
 morRes.PeakParams.Lower_Flank_Local_Peak_Count = nansum(locMax3(:))-nansum(lM3_lFlank(:));
 
+%% Save Results
+morRes.GeneralParams.EndTime = datetime('now');
+if ~isempty(saveResFolder)
+    disp('Saving Results...')
+    save([saveResFolder,figPrefix,'MorVolc_Results.mat'],'morRes')
+end
+
+if ~isempty(xlsFile)
+    Morvolc_SaveXLS(xlsFile,morRes);
+end
+
 %% Plot Results
 if plotResults
     disp('Plotting Results...')
     MorVolc_Plots(morRes);
 end
 
-%% Save Results
-morRes.GeneralParams.EndTime = datetime('now');
-if ~isempty(saveResFolder)
-    disp('Saving Results...')
-    save([saveResFolder,figPrefix,'Morvolc_Results.mat'],'morRes')
-end
-
-if ~isempty(xlsFile)
-    Morvolc_SaveXLS(xlsFile,morRes);
-end
 end
