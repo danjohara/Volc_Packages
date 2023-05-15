@@ -295,6 +295,18 @@ if ischar(craterXY)
         end
         craterXY = [craterXY;NaN,NaN];
     end
+elseif ~isempty(craterXY)
+    cellCraterXY = {};
+    if iscell(craterXY)
+        tmp = [];
+        for i = 1:length(craterXY)
+            tmp = [tmp;craterXY{i}];
+            cellCraterXY = [cellCraterXY;{craterXY{i}}];
+        end
+        craterXY = tmp;
+    else
+        cellCraterXY = {craterXY};
+    end
 else
     cellCraterXY = {};
     craterXY = [];
@@ -528,14 +540,16 @@ powerFit = polyfit(log10(tmpPF_Vals(:,2)),log10(tmpPF_Vals(:,3)),1);
 mets.DrainageParams.HackLawFit_BasinLength = [10^powerFit(2),powerFit(1)];
 
     % Length deviation from best-fitting power law
-    lDev = 10^powerFit(2)*tmpPF_Vals(:,2).^powerFit(1) - tmpPF_Vals(:,3);
+    lDev = log10(tmpPF_Vals(:,3)) - log10(10^powerFit(2)*tmpPF_Vals(:,2).^powerFit(1));
     lDev_Map = DB;
     lDev_Map.Z(:) = NaN;
     for i = 1:length(lDev)
         lDev_Map.Z(DB.Z==tmpPF_Vals(i,1)) = lDev(i);
     end
     
-    mets.DrainageParams.HackLawDeviation_BasinLength = lDev_Map;
+    mets.DrainageParams.HackLawDeviation_BasinLength = [tmpPF_Vals,lDev];
+    mets.DrainageParams.HackLawDeviation_BasinLength_Map = lDev_Map;
+    mets.DrainageParams.HackLawDeviation_Titles = {'Basin ID','Drainage Area','Length','Deviation'};
 
 % Hack's Relationship (L = c*A^b) Using Flow Length
 tmpPF_Vals = [tot_db_stats(:,1),tot_db_stats(:,2),tot_db_stats(:,3)];
@@ -546,14 +560,15 @@ powerFit = polyfit(log10(tmpPF_Vals(:,2)),log10(tmpPF_Vals(:,3)),1);
 mets.DrainageParams.HackLawFit_FlowLength = [10^powerFit(2),powerFit(1)];
 
     % Length deviation from best-fitting power law
-    lDev = 10^powerFit(2)*tmpPF_Vals(:,2).^powerFit(1) - tmpPF_Vals(:,3);
+    lDev = log10(tmpPF_Vals(:,3)) - log10(10^powerFit(2)*tmpPF_Vals(:,2).^powerFit(1));
     lDev_Map = DB;
     lDev_Map.Z(:) = NaN;
     for i = 1:length(lDev)
         lDev_Map.Z(DB.Z==tmpPF_Vals(i,1)) = lDev(i);
     end
     
-    mets.DrainageParams.HackLawDeviation_FlowLength = lDev_Map;
+    mets.DrainageParams.HackLawDeviation_FlowLength = [tmpPF_Vals,lDev];
+    mets.DrainageParams.HackLawDeviation_FlowLength_Map = lDev_Map;
 
 % Drainage Basins Per Contour
 Basin_Contour_ContourP_Count_Length_Area = DrainageVolc_Determine_Basin_Per_Contour(DEMf,DB,basinContIter);
@@ -789,6 +804,12 @@ else
     mets.DivideParams.VerticalDistance = vertDist;
 end
 
+%% Save All Results
+mets.GeneralParams.EndTime = datetime('now');
+if ~isempty(saveResFolder)
+    disp('Saving Results...')
+    save([saveResFolder,figPrefix,'DrainageVolc_Results.mat'],'mets')
+end
 
 %% Plot Results
 if plotResults
@@ -796,10 +817,5 @@ if plotResults
     DrainageVolc_Plots(mets);
 end
 
-%% Save All Results
-mets.GeneralParams.EndTime = datetime('now');
-if ~isempty(saveResFolder)
-    disp('Saving Results...')
-    save([saveResFolder,figPrefix,'DrainageVolc_Results.mat'],'mets')
-end
+
 end

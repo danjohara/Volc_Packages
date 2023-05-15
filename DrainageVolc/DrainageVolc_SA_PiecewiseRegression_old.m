@@ -15,7 +15,7 @@ function [basinAreaThreshold,tranStartA,MN] = DrainageVolc_SA_PiecewiseRegressio
 %   basinAreaThreshold: Array containing best-fit drainage area channel
 %       threshold, r^2 value of the first (hillslope) regresssion, r^2
 %       value of the second (channel) regression, and the r' value given by
-%       r' = min([r_1,r_2]) / max([r_1,r_2]).
+%       r' = (|r_1 - r_2|) / (r_1 + r_2).
 %   tranStartA: Area threhold for transition zone 
 %       initiation.
 
@@ -42,6 +42,8 @@ else
     tranStartA = posSTest(ii);
 end
         
+
+% areaRTests = min(topNFlowAS(:,1))+areaStep:areaStep:max(topNFlowAS(:,1))-areaStep;
 areaRTests = tranStartA+areaStep:areaStep:max(topNFlowAS(:,1))-areaStep;
 areaRTests = [areaRTests',ones(length(areaRTests),3)];
 topNFlowAS(topNFlowAS(:,2)==0,:) = [];
@@ -63,13 +65,19 @@ for i = 1:size(areaRTests,1)
     r2_2 = mdl2.Rsquared.Ordinary;
     
     areaRTests(i,2:3) = [r2_1,r2_2];
-    areaRTests(i,4) = (min([r2_1,r2_2])/max([r2_1,r2_2]))*(r2_1+r2_2)/2; % remove second part if no good
+%     areaRTests(i,4) = (r2_1+r2_2)/2;
+%     areaRTests(i,4) = ((r2_1+r2_2)+abs(r2_1-r2_2))/(r2_1+r2_2);
+%     areaRTests(i,4) = (abs(r2_1-r2_2))/(r2_1+r2_2); % previous chosen one.
+    areaRTests(i,4) = min([r2_1,r2_2])/max([r2_1,r2_2]);
 end
 areaRTests(areaRTests(:,4)==0,2:4) = NaN;
-
 % Get best minA based on balance between R1 & R2.
 areaRTests(areaRTests(:,1)>5e6,:) = NaN;
-minA_i = find(areaRTests(:,4)==nanmax(areaRTests(:,4)),1);
+minA_i = find(areaRTests(:,4)==nanmax(areaRTests(:,4)),1); % use nanmin if previous
+
+% get best minA based on best R2 within a 5 km^2 limit.
+% areaRTests(areaRTests(:,1)>5e6,:) = NaN;
+% minA_i = find(areaRTests(:,3)==nanmax(areaRTests(:,3)),1);
 
 % Continue rest of script.
 basinAreaThreshold = areaRTests(minA_i,:);
