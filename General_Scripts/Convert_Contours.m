@@ -1,4 +1,4 @@
-function C = Convert_Contours(cc,onlyLargest)
+function C = Convert_Contours(cc,onlyLargest,withElevations)
 %%
 % Name: Convert_Contours
 % Author: Daniel O'Hara
@@ -23,7 +23,13 @@ maxSize = -Inf;
 
 i = 1;
 while i<size(cc,2)
-    C = [C;{[cc(:,i+1:i+cc(2,i))]'}];
+    if nargin == 3 && withElevations == 1
+        tmp = [cc(:,i+1:i+cc(2,i))]';
+        tmp = [tmp,ones(size(tmp(:,1)))*cc(1,i)];
+        C = [C;{tmp}];
+    else
+        C = [C;{[cc(:,i+1:i+cc(2,i))]'}];
+    end
     i = i+cc(2,i)+1;
 
     if size(C{end},1) > maxSize
