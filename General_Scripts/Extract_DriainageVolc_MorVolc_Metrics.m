@@ -182,14 +182,14 @@ if isstruct(mets)
     dMets.P_Average_Basin_Length = nanmean(dMets.P_Basin_Lengths);
     dMets.P_Average_Basin_Relief = nanmean(dMets.P_Basin_Reliefs);
     dMets.P_Average_Basin_Width = nanmean(dMets.P_Basin_Widths);
-    dMets.P_Average_Basin_Width_Angles = nanmean(2*atand(dMets.P_Basin_Widths./2./dMets.P_Basin_Width_Distances)); % previously divided by P_Basin_Lengths
+    dMets.P_Average_Basin_Width_Angles = nanmean(2*atand(dMets.P_Basin_Widths./2./dMets.P_Basin_Lengths)); % previously divided by P_Basin_Width_Distances (P_Basin_Lengths used in paper).
     dMets.P_Average_Basin_Hypsometry = nanmean(dMets.P_Basin_Hypsometry);
     dMets.P_Average_Basin_Slope = nanmean(dMets.P_Basin_Slope);
 
     dMets.P_Average_Basin_Length_STD = nanstd(dMets.P_Basin_Slope);
     dMets.P_Average_Basin_Relief_STD = nanstd(dMets.P_Basin_Slope);
     dMets.P_Average_Basin_Width_STD = nanstd(dMets.P_Basin_Slope);
-    dMets.P_Average_Basin_Width_Angles_STD = nanstd(2*atand(dMets.P_Basin_Widths./2./dMets.P_Basin_Width_Distances)); % previously divided by P_Basin_Lengths
+    dMets.P_Average_Basin_Width_Angles_STD = nanstd(2*atand(dMets.P_Basin_Widths./2./dMets.P_Basin_Lengths)); % previously divided by P_Basin_Width_Distances (P_Basin_Lengths used in paper).
     dMets.P_Average_Basin_Hypsometry_STD = nanstd(dMets.P_Basin_Hypsometry);
     dMets.P_Average_Basin_Slope_STD = nanstd(dMets.P_Basin_Slope);
     
