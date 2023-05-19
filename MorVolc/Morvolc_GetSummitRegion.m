@@ -28,7 +28,11 @@ y = Y(:,1);
 dx = x(2)-x(1);
 
 %% Collect Summit
-if summitRegion==4
+if summitRegion < 0 && summitRegion > -1
+    tmp = min(Z(:)) + range(Z(:))*(1+summitRegion);
+    t1 = find(abs(conts-tmp) == min(abs(conts-tmp)),1);
+    summitCont = conts(t1);
+elseif summitRegion==4
     %% Check if crater is being used as the summit
     tmp = conts<useMaxZ;
     t1 = find(tmp==1,1,'last');

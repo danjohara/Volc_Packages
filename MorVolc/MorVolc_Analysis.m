@@ -52,6 +52,8 @@ function morRes = MorVolc_Analysis(pack)
 %                   drainage basins per contour (ignoring upper 10% of the
 %                   edifice).
 %               4: Summit defined by the crater.
+%               Value raging -1 to 0: Summit defined by upper percentile of
+%                   edifice height (similar to DrainageVolc basinTopN flag.
 %       ignoreSummitIndex: Flag to ignore summit and perform ellipticity
 %           and irregularity analysis over edifice.
 %

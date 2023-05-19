@@ -20,6 +20,7 @@ useDEM = viridis(255);
 fs = 15;
 
 %% Hillshade DEM
+try
     figure('Name','DEM Hillshade','units','normalized','outerposition',[0 0 1 1])
     hold on
     imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
@@ -50,8 +51,12 @@ fs = 15;
     title('Edifice Hillshade')
     legend(allP,allPT);
     savePlot(GP,gcf,'Hillshade_DEM')
+catch
+    warning('Could not plot Hillshade DEM')
+end
     
 %% 3D DEM
+try
     figure('Name','3D DEM','units','normalized','outerposition',[0 0 1 1])
     surf(GP.DEM,'exaggerate',2); colormap(demcmap(GP.DEM.Z)); camlight
     hold on
@@ -69,10 +74,15 @@ fs = 15;
     ylabel(cb,'Elevation (m)')
     setAxes(cb,0)
     savePlot(GP,gcf,'3D_DEM')
+catch
+    warning('Could not plot 3D DEM')
+end
     
 %% 2D Slope
     SDEM = GRIDobj(GP.X,GP.Y,GP.S);
     cDEM = GRIDobj(GP.X,GP.Y,GP.Z);
+
+try
     figure('Name','2D Slope','units','normalized','outerposition',[0 0 1 1])
     hold on
     imageschs(cDEM,SDEM,'colormap',useDEM);
@@ -107,8 +117,12 @@ fs = 15;
     ylabel(cb,'Slope (^o)')
     setAxes(cb,0)
     savePlot(GP,gcf,'2D_Slope')
+catch
+    warning('Could not plot Slope DEM')
+end
 
 %% 3D Slope
+try
     figure('Name','3D Slope','units','normalized','outerposition',[0 0 1 1])
     surf(GP.X,GP.Y,GP.Z,GP.S); shading flat; colormap(useDEM); camlight
     hold on
@@ -127,8 +141,12 @@ fs = 15;
     ylabel(cb,'Slope (^o)')
     setAxes(cb,0)
     savePlot(GP,gcf,'3D_Slope')
+catch
+    warning('Could not plot 3D Slopes')
+end
     
 %% Basal Surface Points
+try
     scarseInd = 5;
     tX = GP.X(1:scarseInd:end,1:scarseInd:end);
     tY = GP.Y(1:scarseInd:end,1:scarseInd:end);
@@ -203,8 +221,13 @@ fs = 15;
         view(20,20);
     end
     savePlot(GP,gcf,'Basal_Surface')
+
+catch
+    warning('Could not plot Basal Surfaces')
+end
     
 %% Edifice Profiles - Non-Exaggerated
+try
     [ii_IDL,jj_IDL] = find(GP.Z == max(GP.Z(:)));
     xTmp = GP.X;
     yTmp = GP.Y;
@@ -289,8 +312,12 @@ fs = 15;
 %     legend(allP,allPt)
 
     savePlot(GP,gcf,'Scaled_Profiles')
+catch
+    warning('Could not plot Non-Exaggerated Profiles')
+end
     
 %% Edifice Profiles - Exaggerated
+try
     figure('Name','E-W Non-Scaled Profile','units','normalized','outerposition',[0 0 1 1])
     hold on
     p1 = plot(xProf,xZprof,'-k','linewidth',2);
@@ -359,8 +386,13 @@ fs = 15;
     legend(allP,allPt)
     
     savePlot(GP,gcf,'NtS_NS_Profile')
+
+catch
+    warning('Could not plot Exaggerated Profiles')
+end
     
 %% 3D Edifice Eroded Topography
+try
     az = -37;
     el = 30;
     ErodeGrid = SiP.Convex_Hull_Interpolated_Surface - GP.Z;
@@ -390,8 +422,12 @@ fs = 15;
     setAxes(cb,0)
     
     savePlot(GP,gcf,'3D_ErodedTopography')
+catch
+    warning('Could not plot 3D Eroded Topography')
+end
 
 %% 3D Edifice Eroded Topography
+try
     figure('Name','Eroded Topography Maps','units','normalized','outerposition',[0 0 1 1])
     subplot(2,2,1)
     hold on
@@ -444,8 +480,51 @@ fs = 15;
     box on
 
     savePlot(GP,gcf,'ErodedTopography')
+catch
+    warning('Could not plot Eroded Topography')
+end
+
+%% Edifice Contours
+try
+    figure('Name','Contours','units','normalized','outerposition',[0 0 1 1])
+    hold on
+
+    imageschs(GP.DEM,[],'colormap',demcmap(DEM0.Z))
+    xlabel('X (m)')
+    ylabel('Y (m)')
+
+    [~,p1] = contour(GP.X,GP.Y,GP.Z,ShP.Contour_Values,'-k','linewidth',2);
+    r = 0:.01:2*pi;
+    for i = 1:length(ShP.Contour_Ellipses)
+        if ~isempty(ShP.Contour_Ellipses{i})
+            CE = ShP.Contour_Ellipses{i};
+            xFit = CE.longAxis*cos(r);
+            yFit = CE.shortAxis*sin(r);
+            rotMat = [cosd(-CE.mathPhi),-sind(-CE.mathPhi);sind(-CE.mathPhi),cosd(-CE.mathPhi)];
+            xyRot = [xFit(:),yFit(:)]*rotMat;
+            xFit = xyRot(:,1) + CE.x0;
+            yFit = xyRot(:,2) + CE.y0;
+
+            p2 = plot(xFit,yFit,'-r','linewidth',2);
+        end
+    end
+
+    legend([p1,p2],'Elevation Contour','Best-Fitting Ellipse')
+    title('Analyzed Contours')
+
+    setAxes(gca,fs)
+    cb = colorbar;
+    ylabel(cb,'Elevation (m)')
+    setAxes(cb,0)
+
+    savePlot(GP,gcf,'Contours')
+
+catch
+    warning('Could not plot Contours')
+end
 
 %% Edifice Contour Statistics
+try
     lw1 = 2;
     ms = 8;
 
@@ -532,8 +611,12 @@ fs = 15;
     setAxes(gca,fs)
     title('Ellipse Ellipticity')
     savePlot(GP,gcf,'Edifice_Contour_Stats')
+catch
+    warning('Could not plot Contour Statistics')
+end
     
 %% Crater Contour Stats
+try
     if ~isempty(res.CraterParams)
         for i = 1:length(res.CraterParams.Crater_Contour_Stats)
             cc = res.CraterParams.Crater_Contour_Stats{i};
@@ -562,8 +645,12 @@ fs = 15;
             savePlot(GP,gcf,sprintf('Crater_%d_Contour_Stats',i))
         end
     end
+catch
+    warning('Could not plot Crater Statistics')
+end
     
 %% Crater Surface Points
+try
     scarseInd = 1;
     tX = GP.X(1:scarseInd:end,1:scarseInd:end);
     tY = GP.Y(1:scarseInd:end,1:scarseInd:end);
@@ -642,7 +729,9 @@ fs = 15;
 
         savePlot(GP,gcf,sprintf('Crater %d_Surface',i))
     end 
-
+catch
+    warning('Could not plot Crater Surface')
+end
 end
 
 function setAxes(h,fS)

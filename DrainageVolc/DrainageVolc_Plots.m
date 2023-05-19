@@ -39,6 +39,7 @@ blw = 2;
     savePlot(GP,gcf,'Raw_Topography')
     
 %% Topography and Hypsometry
+try
     figure('Name','Elevation','units','normalized','outerposition',[0 0 1 1])
     % Map
     subplot(1,2,1)
@@ -67,8 +68,12 @@ blw = 2;
     box on
     title('Topography Distribution (Hypsometry)')
     savePlot(GP,gcf,'Topography');
+catch
+    warning('Could not plot Topography and Hypsometry')
+end
     
 %% Slope and Distribution
+try
     figure('Name','Slope','units','normalized','outerposition',[0 0 1 1])
     % Slope Map
     subplot(1,2,1)
@@ -99,8 +104,12 @@ blw = 2;
     box on
     title('Slope Distribution')
     savePlot(GP,gcf,'Slope')
+catch
+    warning('Could not plot Slopes and Distribution')
+end
 
 %% Profile Curvature and Distribution
+try
     i1 = find(TP.CProf_Hyps_Areas<=.01,1,'last');
     i2 = find(TP.CProf_Hyps_Areas>=.99,1,'first');
 
@@ -137,8 +146,12 @@ blw = 2;
     ylim([-rV,rV])
     title('Profile Curvature Distribution')
     savePlot(GP,gcf,'Profile_Curvature')
+catch
+    warning('Could not plot Profile Curvature and Distribution')
+end
 
 %% Planform Curvature and Distribution
+try
     i1 = find(TP.CPlan_Hyps_Areas<=.01,1,'last');
     i2 = find(TP.CPlan_Hyps_Areas>=.99,1,'first');
 
@@ -175,8 +188,12 @@ blw = 2;
     ylim([-rV,rV])
     title('Planform Curvature Distribution')
     savePlot(GP,gcf,'Planform_Curvature')
+catch
+    warning('Could not plot Planform Curvature and Distribution')
+end
     
 %% Roughness and Distribution
+try
     if length(GP.inputs.roughnessWindows)>4
         warning('Number of roughness windows exceeds figure max grids; plotting only four.')
     end
@@ -237,8 +254,12 @@ blw = 2;
     box on
     title('Normalized Roughness Distribution')
     savePlot(GP,gcf,'Roughness_Distributions')
+catch
+    warning('Could not plot Roughness and Distribution')
+end
     
 %% Shape Center Locations
+try
     figure('Name','Shape Centers','units','normalized','outerposition',[0 0 1 1])
     hold on
     imageschs(GP.DEM,[],'colormap',demcmap(GP.DEM.Z))
@@ -257,8 +278,12 @@ blw = 2;
     legend([p1,p2,p3],{'Topographic Center','Geometric Center','Volumetric Center'})
     title('Volcano ''Center''')
     savePlot(GP,gcf,'Shape_Centers')
+catch
+    warning('Could not plot Shape Centers')
+end
     
 %% Drainage Area, Distance, and Basins
+try
     figure('Name','Drainage Metrics','units','normalized','outerposition',[0 0 1 1])
     % Drainage Area Map
     subplot(2,2,1)
@@ -316,8 +341,12 @@ blw = 2;
     axis square
     title('Basin Topographic Distribution')
     savePlot(GP,gcf,'Drainage_Metrics')
+catch
+    warning('Could not plot Drainage Values')
+end
     
 %% Hack's Law Plot - Basin Length
+try
     figure
     pcolor(DP.HackLawDeviation_BasinLength_Map.Z);shading flat;
     bwrCM = colormap(bluewhitered(255));
@@ -360,8 +389,12 @@ blw = 2;
     setAxes(gca,0)
     title(sprintf('Basin Length Deviation from\nHack''s Law (Basin Length)'))
     savePlot(GP,gcf,'Hacks_Law_Relationship_BasinLength')
+catch
+    warning('Could not plot Basin Length Hack''s Law')
+end
 
 %% Hack's Law Plot - Basin Flow Length
+try
     figure
     pcolor(DP.HackLawDeviation_FlowLength_Map.Z);shading flat;
     bwrCM = colormap(bluewhitered(255));
@@ -404,8 +437,12 @@ blw = 2;
     setAxes(gca,0)
     title(sprintf('Basin Length Deviation from\nHack''s Law (Flow Length)'))
     savePlot(GP,gcf,'Hacks_Law_Relationship_FlowLength')
+catch
+    warning('Could not plot Flow Length Hack''s Law')
+end
 
 %% Drainage Area - Slope Plots
+try
     figure('Name','Slope-Area Plots','units','normalized','outerposition',[0 0 1 1])
     subplot(1,2,1)
     plot(DP.TopN_All_Area_Slope(:,1),tand(DP.TopN_All_Area_Slope(:,2)),'.k')
@@ -482,8 +519,12 @@ blw = 2;
         title(sprintf('Flowpath Slope-Area of Basins\nin Upper %d%% of Topography\n(%d Basins)',abs(GP.inputs.basinTopN)*100,length(CP.Concavity_BasinIDs)));
     end
     savePlot(GP,gcf,'Slope-Area')
+catch
+    warning('Could not plot Slope-Area')
+end
     
 %% Basin Statistics 1
+try
     figure('Name','Basin Total Statistics 1','units','normalized','outerposition',[0 0 1 1])
     % Basin Height Map
     subplot(2,2,1)
@@ -549,8 +590,12 @@ blw = 2;
     title('Basin Ellipticity')
         
     savePlot(GP,gcf,'Basin_Total_Statistics_1')
+catch
+    warning('Could not plot Basin Statistics 1')
+end
 
 %% Basin Statistics 2
+try
     figure('Name','Basin Total Statistics 2','units','normalized','outerposition',[0 0 1 1])
     % Basin Hypsometry
     subplot(2,2,1)
@@ -615,7 +660,11 @@ blw = 2;
     title('Basin Orientation')
 
     savePlot(GP,gcf,'Basin_Total_Statistics_2')
+catch
+    warning('Could not plot Basin Statistics 2')
+end
 %% Basin Statistics 3
+try
     figure('Name','Basin Total Statistics 3','units','normalized','outerposition',[0 0 1 1])
     % Basin Flow Length Map
     subplot(2,2,1)
@@ -667,7 +716,11 @@ blw = 2;
     caxis([1,cax(2)])
     
     savePlot(GP,gcf,'Basin_Total_Statistics_3')
+catch
+    warning('Could not plot Basin Statistics 3')
+end
 %% Cross-Basin Statistics
+try
     figure('Name','Basin Cross Statistics','units','normalized','outerposition',[0 0 1 1])
     % Basin Widths
     subplot(1,2,1)
@@ -702,8 +755,12 @@ blw = 2;
     setAxes(cb,0)
     title('Cross-Basin Relief')
     savePlot(GP,gcf,'Cross_Basin_Statistics')
+catch
+    warning('Could not plot Cross-Basin Statistics')
+end
 
 %% Drainage Basins Per Contour
+try
     figure('Name','Basins Per Contour','units','normalized','outerposition',[0 0 1 1])
     subplot(1,2,1)
     bCCpCLA = DP.Basin_Contour_ContourP_Count_Length_Area;
@@ -740,12 +797,15 @@ blw = 2;
     ylim([min(bCCpCLA(:,2)),max(bCCpCLA(:,2))])
     ylabel('Percent Relief')
     savePlot(GP,gcf,'Basin_per_Contour')
+catch
+    warning('Could not plot Basin-Contour Relationships')
+end
 
 %% Channels
+try
     figure('Name','Channels','units','normalized','outerposition',[0 0 1 1])
     hold on
     imageschs(GP.DEM,[],'colormap',demcmap(GP.DEM.Z))
-%     pcolor(GP.cutX,GP.cutY,GP.cutZ);shading flat; axis image; colormap(demcmap(GP.cutZ));
     plot(GP.boundaryXY(:,1),GP.boundaryXY(:,2),'-k')
     plot(CP.S,'-k','linewidth',2)
     
@@ -758,8 +818,12 @@ blw = 2;
     setAxes(cb,0)
     title(sprintf('Drainage Channels (Threshold = %.2f km^2)',CP.ChannelThreshold./1e6))
     savePlot(GP,gcf,'Channel')
+catch
+    warning('Could not plot Channels')
+end
 
 %% Drainage Density Along Channels
+try
     figure('Name','Channel Drainage Density','units','normalized','outerposition',[0 0 1 1])
     % Channel Drainage Density Map
     hold on
@@ -779,8 +843,12 @@ blw = 2;
     title('Drainage Density Along Channels')
 
     savePlot(GP,gcf,'Drainage_Density_Channels')
+catch
+    warning('Could not plot Drainage Density Along Channels')
+end
 
 %% Basin Drainage Density
+try
     figure('Name','Basin Drainage Density','units','normalized','outerposition',[0 0 1 1])
     % Basin Drainage Density Map
     subplot(1,2,1)
@@ -814,11 +882,16 @@ blw = 2;
     setAxes(cb,0)
     title(sprintf('Maximum Basin\nDrainage Density'))
     savePlot(GP,gcf,'Drainage_Density_Basins')
+catch
+    warning('Could not plot Basin Drainage Density')
+end
     
 %% Channel Concavity
+try
     figure('Name','Concavity','units','normalized','outerposition',[0 0 1 1])
-    if size(CP.Concavity_Streams,1) <= 4
-        useBasinIs = 1:size(CP.Concavity_Streams,1);
+    
+    if size(CP.Concavity_Streams,1) == 0
+        useBasinIs = [];
     else
         nonNaNIs = 1:size(CP.Concavity_Stats);
         t = ones(1,size(CP.Concavity_Stats,1));
@@ -826,13 +899,16 @@ blw = 2;
             t(i) = isnan(CP.Concavity_Stats(i).ks);
         end
         nonNaNIs(t==1) = [];
-        useBasinIs = randsample(nonNaNIs,4);
-%         useBasinIs = randsample(size(CP.Concavity_Streams,1),6);
+
+        if length(nonNaNIs) <= 4
+            useBasinIs = length(nonNaNIs);
+        else
+            useBasinIs = randsample(nonNaNIs,4);
+        end
     end
     useBasinIDs = [];
     % Concavity Plot
     for i = 1:length(useBasinIs)
-%     for i = 1:min([size(CP.Concavity_Streams,1),6])
         if i > 2
             useI = i+2;
         else
@@ -847,7 +923,6 @@ blw = 2;
         set(gca,'yscale','log')
         xx = xlim();
         yy = ylim();
-%         plot(xx,CP.Concavity_Stats(i).ks(1)*xx.^CP.Concavity_Stats(i).theta,'--k','linewidth',1.5);
         plot(sortrows(cc(:,1)),CP.Concavity_Stats(i).ks(1)*sortrows(cc(:,1)).^CP.Concavity_Stats(i).theta,'--k','linewidth',lw);
         xlim(xx);
         ylim(yy);
@@ -868,7 +943,7 @@ blw = 2;
     subplot(2,4,[3,4,7,8])
     hold on
     try
-        imageschs(GP.DEM,CP.Concavity_DEM,'colormap',useCM)
+        imageschs(GP.DEM,CP.Concavity_DEM,'colormap',useCM,'caxis',[0,2])
     catch
         warning('No Concavity values available - decrease the drainage area threshold.');
     end
@@ -894,221 +969,244 @@ blw = 2;
             plot(tx,ty,'-k','linewidth',.5)
         end
     end
-    caxis([0,1])
+    caxis([0,2])
     cb = colorbar;
     ylabel(cb,'|Concavity|')
     title('Plotted Basins')
     colormap(useCM)
     savePlot(GP,gcf,'Concavity')
+catch
+    warning('Could not plot Channel Concavity')
+end
     
 %% Chi Results
 if ~isnan(CP.Chi)
-    figure('Name','Channel Chi','units','normalized','outerposition',[0 0 1 1])
-    % Channel Chi Map
-    hold on
-    imageschs(GP.DEM,[],'colormap',[1 1 1],'colorbar',false)
-    plot(DP.DBxy(:,1),DP.DBxy(:,2),'-k','linewidth',.5)
-    plot(GP.boundaryXY(:,1),GP.boundaryXY(:,2),'-k')
-    plotc(CP.chiS,CP.Chi,'linewidth',5); colormap(useCM)
-    
-    xlabel('X (m)')
-    ylabel('Y (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'\chi (m)')
-    setAxes(cb,0)
-    box on
-    title(sprintf('Channel \\chi\n(Best-Fitting M/N = %.2f)',CP.BestFit_MN))
-    savePlot(GP,gcf,'Chi_Channels')
+    try
+        figure('Name','Channel Chi','units','normalized','outerposition',[0 0 1 1])
+        % Channel Chi Map
+        hold on
+        imageschs(GP.DEM,[],'colormap',[1 1 1],'colorbar',false)
+        plot(DP.DBxy(:,1),DP.DBxy(:,2),'-k','linewidth',.5)
+        plot(GP.boundaryXY(:,1),GP.boundaryXY(:,2),'-k')
+        plotc(CP.chiS,CP.Chi,'linewidth',5); colormap(useCM)
+        
+        xlabel('X (m)')
+        ylabel('Y (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'\chi (m)')
+        setAxes(cb,0)
+        box on
+        title(sprintf('Channel \\chi\n(Best-Fitting M/N = %.2f)',CP.BestFit_MN))
+        savePlot(GP,gcf,'Chi_Channels')
+    catch
+        warning('Could not plot Chi Channel Map')
+    end
 
-    figure('Name','Projected Chi','units','normalized','outerposition',[0 0 1 1])
-    subplot(1,2,1)
-    hold on
-    imageschs(GP.DEM,CP.MaxChi,'colormap',useCM)
-    plot(GP.boundaryXY(:,1),GP.boundaryXY(:,2),'-k')
-    plot(CP.chiS,'-k','linewidth',blw)
+    try
+        figure('Name','Projected Chi','units','normalized','outerposition',[0 0 1 1])
+        subplot(1,2,1)
+        hold on
+        imageschs(GP.DEM,CP.MaxChi,'colormap',useCM)
+        plot(GP.boundaryXY(:,1),GP.boundaryXY(:,2),'-k')
+        plot(CP.chiS,'-k','linewidth',blw)
+        
+        xlabel('X (m)')
+        ylabel('Y (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'Basin Max \chi (m)')
+        setAxes(cb,0)
+        box on
+        title(sprintf('Basin Maximum \\chi\n(Best-Fitting M/N = %.2f)',CP.BestFit_MN))
     
-    xlabel('X (m)')
-    ylabel('Y (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'Basin Max \chi (m)')
-    setAxes(cb,0)
-    box on
-    title(sprintf('Basin Maximum \\chi\n(Best-Fitting M/N = %.2f)',CP.BestFit_MN))
-
-    subplot(1,2,2)
-    hold on
-    imageschs(GP.DEM,CP.UpstreamChi,'colormap',useCM)
-    plot(GP.boundaryXY(:,1),GP.boundaryXY(:,2),'-k')
-    plot(CP.chiS,'-k','linewidth',blw)
-    
-    xlabel('X (m)')
-    ylabel('Y (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    title(sprintf('Upstream-Projected \\chi\n(Best-Fitting M/N = %.2f)',CP.BestFit_MN))
-    setAxes(cb,0)
-    box on
-    savePlot(GP,gcf,'Chi_Projected')
+        subplot(1,2,2)
+        hold on
+        imageschs(GP.DEM,CP.UpstreamChi,'colormap',useCM)
+        plot(GP.boundaryXY(:,1),GP.boundaryXY(:,2),'-k')
+        plot(CP.chiS,'-k','linewidth',blw)
+        
+        xlabel('X (m)')
+        ylabel('Y (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        title(sprintf('Upstream-Projected \\chi\n(Best-Fitting M/N = %.2f)',CP.BestFit_MN))
+        setAxes(cb,0)
+        box on
+        savePlot(GP,gcf,'Chi_Projected')
+    catch
+        warning('Could not plot Projected Chi Map')
+    end
 end
 
 %% Divide Ordering
 if GP.inputs.Analyze_Divides
-    figure('Name','Topo Divide Ordering Metrics','units','normalized','outerposition',[0 0 1 1])
-    % Divide Distance Map
-    subplot(2,2,1)
-    hold on
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
-    plotc(DV.Divide_Topo.DVD,DV.Divide_Topo.DVD.distance./1e3,'limit',[1000 inf])
-    plot(CP.S,'-k','linewidth',1)
-    box on
-    
-    xlabel('X (m)')
-    ylabel('Y (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'Divide Distance (km)')
-    setAxes(cb,0)
-    colormap(useCM)
-    title('Divide Distance')
-
-    % Divide Elevation Map
-    subplot(2,2,2)
-    hold on
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
-    plotc(DV.Divide_Topo.DVD,GP.DEM,'limit',[1000 inf])
-    plot(CP.S,'-k','linewidth',1)
-    box on
-    
-    xlabel('X (m)')
-    ylabel('Y (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'Divide Elevation (m)')
-    setAxes(cb,0)
-    colormap(useCM)
-    title('Divide Elevation')
-
-    % Divide Asymmetry Map
-    subplot(2,2,3)
-    hold on
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
-    plotc(DV.Divide_Topo.DVD,DV.Divide_AsymmetryIndex,'caxis',[0,1],'limit',[1000 inf])
-    plot(CP.S,'-k','linewidth',1)
-    box on
-    
-    xlabel('X (m)')
-    ylabel('Y (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'Divide Asymmetry')
-    setAxes(cb,0)
-    colormap(useCM)
-    title('Divide Asymmetry Index')
-
-    % Divide Chi-Difference Map
-    subplot(2,2,4)
-    hold on
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
     try
-        plotc(DV.Divide_Topo.DVD,DV.Divide_ChiDifference)
+        figure('Name','Topo Divide Ordering Metrics','units','normalized','outerposition',[0 0 1 1])
+        % Divide Distance Map
+        subplot(2,2,1)
+        hold on
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
+        plotc(DV.Divide_Topo.DVD,DV.Divide_Topo.DVD.distance./1e3,'limit',[1000 inf])
+        plot(CP.S,'-k','linewidth',1)
+        box on
+        
+        xlabel('X (m)')
+        ylabel('Y (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'Divide Distance (km)')
+        setAxes(cb,0)
+        colormap(useCM)
+        title('Divide Distance')
+    
+        % Divide Elevation Map
+        subplot(2,2,2)
+        hold on
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
+        plotc(DV.Divide_Topo.DVD,GP.DEM,'limit',[1000 inf])
+        plot(CP.S,'-k','linewidth',1)
+        box on
+        
+        xlabel('X (m)')
+        ylabel('Y (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'Divide Elevation (m)')
+        setAxes(cb,0)
+        colormap(useCM)
+        title('Divide Elevation')
+    
+        % Divide Asymmetry Map
+        subplot(2,2,3)
+        hold on
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
+        plotc(DV.Divide_Topo.DVD,DV.Divide_AsymmetryIndex,'caxis',[0,1],'limit',[1000 inf])
+        plot(CP.S,'-k','linewidth',1)
+        box on
+        
+        xlabel('X (m)')
+        ylabel('Y (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'Divide Asymmetry')
+        setAxes(cb,0)
+        colormap(useCM)
+        title('Divide Asymmetry Index')
+    
+        % Divide Chi-Difference Map
+        subplot(2,2,4)
+        hold on
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
+        try
+            plotc(DV.Divide_Topo.DVD,DV.Divide_ChiDifference)
+        catch
+            disp('Issues plotting Chi difference across divides')
+        end
+        plot(CP.S,'-k','linewidth',1)
+        box on
+        
+        xlabel('X (m)')
+        ylabel('Y (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'Divide \chi Difference')
+        setAxes(cb,0)
+        colormap(useCM)
+        title('Divide \chi Difference')
+    
+        savePlot(GP,gcf,'Divide_Topo_Ordering')
     catch
-        disp('Issues plotting Chi difference across divides')
+        warning('Could not plot Divide Ordering')
     end
-    plot(CP.S,'-k','linewidth',1)
-    box on
-    
-    xlabel('X (m)')
-    ylabel('Y (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'Divide \chi Difference')
-    setAxes(cb,0)
-    colormap(useCM)
-    title('Divide \chi Difference')
 
-    savePlot(GP,gcf,'Divide_Topo_Ordering')
-
-    figure('Name','Divide Statistics','units','normalized','outerposition',[0 0 1 1])
-    % Divide Distance-Elevation-Asymmetry plot
-    subplot(1,2,1)
-    scatter(DV.Divide_Topo.DVD.distance./1000,getvalue(DV.Divide_Topo.DVD,DV.VerticalDistance,'min'),[],DV.Divide_AsymmetryIndex,'o','filled')
-    box on
-    
-    xlabel('Divide Distance (km)')
-    ylabel('Divide Elevation (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'Asymmetry Index')
-    setAxes(cb,0)
-    caxis([0,1])
-    title('Divide Topography Statistics I')
-    savePlot(GP,gcf,'Divides_Topo_Ordering')
-    axis square
-    box on
-
-    % Divide Distance-Elevation-Chi plot
-    subplot(1,2,2)
     try
-        scatter(DV.Divide_Topo.DVD.distance./1000,getvalue(DV.Divide_Topo.DVD,DV.VerticalDistance,'min'),[],DV.Divide_ChiDifference,'o','filled')
+        figure('Name','Divide Statistics','units','normalized','outerposition',[0 0 1 1])
+        % Divide Distance-Elevation-Asymmetry plot
+        subplot(1,2,1)
+        scatter(DV.Divide_Topo.DVD.distance./1000,getvalue(DV.Divide_Topo.DVD,DV.VerticalDistance,'min'),[],DV.Divide_AsymmetryIndex,'o','filled')
+        box on
+        
+        xlabel('Divide Distance (km)')
+        ylabel('Divide Elevation (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'Asymmetry Index')
+        setAxes(cb,0)
+        caxis([0,1])
+        title('Divide Topography Statistics I')
+        savePlot(GP,gcf,'Divides_Topo_Ordering')
+        axis square
+        box on
+    
+        % Divide Distance-Elevation-Chi plot
+        subplot(1,2,2)
+        try
+            scatter(DV.Divide_Topo.DVD.distance./1000,getvalue(DV.Divide_Topo.DVD,DV.VerticalDistance,'min'),[],DV.Divide_ChiDifference,'o','filled')
+        catch
+            disp('Issues plotting Chi difference across divides')
+        end
+        box on
+        
+        xlabel('Divide Distance (km)')
+        ylabel('Divide Elevation (m)')
+        setAxes(gca,fs)
+        
+        cb = colorbar;
+        ylabel(cb,'\chi Difference (m)')
+        setAxes(cb,0)
+        title('Divide Topography Statistics II')
+        colormap(useCM)
+        axis square
+        box on
+        savePlot(GP,gcf,'Divide_Statistics')
     catch
-        disp('Issues plotting Chi difference across divides')
+        warning('Could not plot Divide Statistics')
     end
-    box on
-    
-    xlabel('Divide Distance (km)')
-    ylabel('Divide Elevation (m)')
-    setAxes(gca,fs)
-    
-    cb = colorbar;
-    ylabel(cb,'\chi Difference (m)')
-    setAxes(cb,0)
-    title('Divide Topography Statistics II')
-    colormap(useCM)
-    axis square
-    box on
-    savePlot(GP,gcf,'Divide_Statistics')
 end
     
 %% Junction Connectivity
 if GP.inputs.Analyze_Divides
-    figure('Name','Junction Connectivity','units','normalized','outerposition',[0 0 1 1])
-    % Connectivity Map
-    subplot(1,2,1)
-    hold on
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
-    plot(DV.Divide_Topo.DVD,'color',[0 0 0],'endpoints',false,'junction',false)
-    scatter(DV.Junction_X_Y_C_Z_D_A(:,1),DV.Junction_X_Y_C_Z_D_A(:,2),50,DV.Junction_X_Y_C_Z_D_A(:,3),'filled')
-    colormap(useCM)
-    cb = colorbar;
-    ylabel(cb,'Junction connectivity')
-    title('Junction Connectivity')
-    legend('Divide','Junction')
-    setAxes(gca,fs)
-    cb = colorbar;
-    ylabel(cb,'Junction Connectivity')
-    setAxes(cb,0)
-
-    % Connectivity Plot
-    subplot(1,2,2)
-    plot(DV.Junction_X_Y_C_Z_D_A(:,3),DV.Junction_X_Y_C_Z_D_A(:,4),'ok','markerfacecolor','k')
-    xlabel('Junction Connectivity')
-    ylabel('Junction Elevation')
-    title('Junction Relationship')
-    axis tight
-    axis square
-    box on
-    setAxes(gca,fs)
-    savePlot(GP,gcf,'Junction_Connectivity')
+    try
+        figure('Name','Junction Connectivity','units','normalized','outerposition',[0 0 1 1])
+        % Connectivity Map
+        subplot(1,2,1)
+        hold on
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false)
+        plot(DV.Divide_Topo.DVD,'color',[0 0 0],'endpoints',false,'junction',false)
+        scatter(DV.Junction_X_Y_C_Z_D_A(:,1),DV.Junction_X_Y_C_Z_D_A(:,2),50,DV.Junction_X_Y_C_Z_D_A(:,3),'filled')
+        colormap(useCM)
+        cb = colorbar;
+        ylabel(cb,'Junction connectivity')
+        title('Junction Connectivity')
+        legend('Divide','Junction')
+        setAxes(gca,fs)
+        cb = colorbar;
+        ylabel(cb,'Junction Connectivity')
+        setAxes(cb,0)
+    
+        % Connectivity Plot
+        subplot(1,2,2)
+        plot(DV.Junction_X_Y_C_Z_D_A(:,3),DV.Junction_X_Y_C_Z_D_A(:,4),'ok','markerfacecolor','k')
+        xlabel('Junction Connectivity')
+        ylabel('Junction Elevation')
+        title('Junction Relationship')
+        axis tight
+        axis square
+        box on
+        setAxes(gca,fs)
+        savePlot(GP,gcf,'Junction_Connectivity')
+    catch
+        warning('Could not plot Divide Junction Connectivity')
+    end
 end
 end
 
