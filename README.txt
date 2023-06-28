@@ -4,7 +4,7 @@ The paper that introduces these algorithms is in process to be submitted to Eart
 
 O'Hara, D., Goren, L., van Wees, R.M.J., Campforts, B., Grosse ,P., Lahitte, P., Kereszturi, G., Kervyn, M. (submitted). Volcano drainage morphology co-varies with age of activity - new insights on radial drainage development and edifice erosion. Earth Surface Dynamics.
 
-Both algorithms use TopoToolbox for their analysis, which can be downloaded from https://topotoolbox.wordpress.com/ and placed into the General_Scripts folder. Other community-written scripts are also used by the algorithms to perform simple tasks. These scripts are already incorporated into General_Scripts folder, following CC licencing. Script references are provided below.
+Both algorithms use TopoToolbox for their analysis, which can be downloaded from https://topotoolbox.wordpress.com/ and placed into the General_Scripts folder. These algorithms also use Matlab's built-in packages that need downloaded; including Statistics and Machine Learning, Parallel Computing, Image Processing, Mapping, and Signal Processing. Other community-written scripts are also used by the algorithms to perform simple tasks. These scripts are already incorporated into General_Scripts folder, following CC licencing. Script references are provided below.
 
 fitellipse:
 Fitzgibbon, Andrew W., Maurizio Pilu, and Robert B. Fisher. "Direct least squares fitting of ellipses". IEEE Transactions on Pattern Analysis and Machine Intelligence, 21(5), 476-480, May 1999. http://homepages.inf.ed.ac.uk/rbf/CVonline/LOCAL_COPIES/FITZGIBBON/ELLIPSE/
