@@ -2,7 +2,7 @@ This package includes Matlab scripts to analyze the morphology of volcanic edifi
 
 The paper that introduces these algorithms is in process to be submitted to Earth Surface Dynamics, and should be referenced as:
 
-O'Hara, D., Goren, L., van Wees, R.M.J., Campforts, B., Grosse ,P., Lahitte, P., Kereszturi, G., Kervyn, M. (submitted). Volcano drainage morphology co-varies with age of activity - new insights on radial drainage development and edifice erosion. Earth Surface Dynamics.
+O'Hara, D., Goren, L., van Wees, R.M.J., Campforts, B., Grosse ,P., Lahitte, P., Kereszturi, G., Kervyn, M. (submitted). Time-varying drainage basin development and erosion on volcanic edifices. Earth Surface Dynamics.
 
 Both algorithms use TopoToolbox for their analysis, which can be downloaded from https://topotoolbox.wordpress.com/ and placed into the General_Scripts folder. These algorithms also use Matlab's built-in packages that need downloaded; including Statistics and Machine Learning, Parallel Computing, Image Processing, Mapping, and Signal Processing. Other community-written scripts are also used by the algorithms to perform simple tasks. These scripts are already incorporated into General_Scripts folder, following CC licencing. Script references are provided below.
 
