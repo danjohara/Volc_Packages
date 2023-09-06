@@ -48,7 +48,7 @@ end
 for i = 1:length(packStringFields)
     if ~isfield(pack,packStringFields{i})
         disp(sprintf('WARNING: Missing field ''%s'', filling with default value.',packStringFields{i}))
-        eval(sprintf('pack.%s = %s;',packStringFields{i},packStringVals{i}))
+        eval(sprintf('pack.%s = ''%s'';',packStringFields{i},packStringVals{i}))
     end
 end
 
@@ -60,7 +60,7 @@ end
 
 if ~isfield(pack,'slopeVarianceWindows')
     disp('WARNING: Missing field ''slopeVarianceWindows'', filling with default value.')
-    pack.roughnessWindows = [250,500,1000,2000];
+    pack.slopeVarianceWindows = [250,500,1000,2000];
 end
 
 %% Version Number
