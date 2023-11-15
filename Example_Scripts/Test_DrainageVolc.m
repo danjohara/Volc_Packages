@@ -39,6 +39,7 @@ pack.basinTopNFromContLength = 1;
 pack.limitHacksLaw = 1;
 pack.smoothBasinPointWavelength = 1000;
 pack.parallelProc = 0;
+pack.basinStatThreshold = 1e5;
 
 % Channel values
 pack.channelThreshold = 5e5;
