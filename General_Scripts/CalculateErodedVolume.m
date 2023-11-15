@@ -1,4 +1,4 @@
-function [cont_area_convHullArea,volumeDiff,convZ] = CalculateErodedVolume2(X,Y,Z,contZ,startZ,onlyLargestContour,silentRun)
+function [cont_area_convHullArea,volumeDiff,convZ] = CalculateErodedVolume(X,Y,Z,bxyz,contZ,startZ,onlyLargestContour,silentRun)
 %%
 % Name: CalculateErodedVolume
 % Author: Daniel O'Hara
@@ -126,7 +126,25 @@ for i = startZ:contZ:max(Z(:))+contZ
 end
 
 try
-cInterp = scatteredInterpolant(convPoints(:,1),convPoints(:,2),convPoints(:,3));
+    % Remove points outside of the boundary
+    pp = inpolygon(convPoints(:,1),convPoints(:,2),bxyz(:,1),bxyz(:,2));
+    convPoints(pp==0,:) = [];
+
+    % Remove duplicate XY points
+    convPoints = sortrows(round(convPoints,0),3,'descend');
+    cutPoints = zeros(size(convPoints,1),1);
+    for i = 1:size(convPoints,1)
+        tmp = pdist2(convPoints(i,1:2),convPoints(:,1:2));
+        t3 = tmp < abs(X(2,2)-X(1,1));
+        ii = find(t3==1);
+        ii(ii<i) = [];
+        if length(ii) > 1
+            cutPoints(ii(2:end)) = 1;
+        end
+    end
+    convPoints(cutPoints==1,:) = [];
+
+    cInterp = scatteredInterpolant(convPoints(:,1),convPoints(:,2),convPoints(:,3),'linear','none');
 catch er 
     disp('  TOO FEW POINTS IN GRID')
     volumeDiff = NaN;
