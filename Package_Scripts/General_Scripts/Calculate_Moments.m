@@ -24,7 +24,16 @@ function [ x,y,z,Gm,PDFm,centerOfMass,skewness,kurtosis ] = Calculate_Moments(x,
 %   kurtosis: Values of mathematical kurtosis (i.e. 'tailedness' of the
 %       shape in the X and Y directions.
 
+%% Check input
+if size(x,1) > 1
+    x = x';
+end
 
+if size(y,1) > 1
+    y = y';
+end
+
+%% Create grids
 dx = abs(diff(x(1,1:2)));
 dy = abs(diff(y(1,1:2)));
 oldX = x;
@@ -44,7 +53,7 @@ sy = size(y);
 xG = repmat(x,[sy(1,2) 1]);
 yG = repmat(y',[1,sx(1,2)]);
 
-%Geometric moments
+%% Geometric moments
 Gm = zeros(3,3);
 
 for i = 1:3
@@ -57,7 +66,7 @@ end
 
 centerOfMass = [Gm(1,2)/Gm(1,1), Gm(2,1)/Gm(1,1)];
 
-%PDF moments
+%% PDF moments
 PDFm = zeros(5,5);
 
 % Centralize to the CoM
@@ -87,7 +96,7 @@ end
 % skewness = [ppp(1,4),ppp(4,1)];
 % kurtosis = [ppp(1,5),ppp(5,1)];
 
-% Normalize to the 0th moment.
+%% Normalize to the 0th moment.
 PDFm = PDFm./PDFm(1,1);
 
 skewness = [PDFm(1,4)/sqrt(PDFm(1,3)^3),PDFm(4,1)/sqrt(PDFm(3,1)^3)];

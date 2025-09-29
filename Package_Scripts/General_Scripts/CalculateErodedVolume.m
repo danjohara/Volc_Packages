@@ -1,4 +1,4 @@
-function [cont_area_convHullArea,volumeDiff,convZ] = CalculateErodedVolume(X,Y,Z,bxyz,contZ,startZ,onlyLargestContour,silentRun)
+function [cont_area_convHullArea,volumeDiff,convZ] = CalculateErodedVolume(X,Y,Z,bxyz,contZ,startZ,onlyLargestContour,verbose)
 %%
 % Name: CalculateErodedVolume
 % Author: Daniel O'Hara
@@ -39,7 +39,7 @@ gridDx = sqrt((X(1,1)-X(2,2))^2 + (Y(1,1)-Y(2,2))^2);
 %% Get contour areas
 convPoints = [];
 for i = startZ:contZ:max(Z(:))+contZ
-    if ~silentRun
+    if verbose > 1
         disp(sprintf('%d / %d',counter,length(startZ:contZ:max(Z(:))+contZ)))
     end
     tmpZ = Z>=i;
