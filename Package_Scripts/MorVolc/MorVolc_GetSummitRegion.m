@@ -1,4 +1,4 @@
-function [summitXYZ,summitCont] = MorVolc_GetSummitRegion(summitRegion,Z,S,X,Y,lowFlankZ,conts,useMaxZ,peakDiff)
+function [summitXYZ,summitCont] = MorVolc_GetSummitRegion(summitRegion,Z,S,X,Y,lowFlankZ,conts,useMaxZ,peakDiff,verbose)
 % Name: MorVolc_GetSummitRegion
 % Author: Daniel O'Hara
 % Date: 03/17/2021 (mm/dd/yyyy)
@@ -17,6 +17,7 @@ function [summitXYZ,summitCont] = MorVolc_GetSummitRegion(summitRegion,Z,S,X,Y,l
 %   useMaxZ: Maximum elevation to generate contours for summit analysis.
 %   peakDiff: Percentage value to distinguish edifice peaks from
 %       local-minima topography.
+%   verbose: Verbose flag
 %
 % Output:
 %   summitXYZ: Summit boundary x-, y-, and z-coordinates.
@@ -61,7 +62,9 @@ else
 
     %% Loop through contours 
     for i = 2:length(conts)
-        disp(sprintf('   Contour %d / %d',i,length(conts)))
+        if verbose > 1
+            disp(sprintf('   Contour %d / %d',i,length(conts)))
+        end
         
         %% Isolate elevations   
         tmpZ = Z;

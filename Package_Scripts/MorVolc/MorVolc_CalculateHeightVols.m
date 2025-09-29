@@ -1,4 +1,4 @@
-function [surfXYs,surfZs,maxHeight,maxVol,volcHeights,volcVols,anyHeights] = MorVolc_CalculateHeightVols(X,Y,Z,boundaryXYZ,exZ,interpSurfaces)
+function [surfXYs,surfZs,surfDEMs,maxHeight,maxVol,volcHeights,volcVols,anyHeights] = MorVolc_CalculateHeightVols(X,Y,Z,boundaryXYZ,exZ,interpSurfaces)
 % Name: MorVolc_CalculateHeightVols
 % Author: Daniel O'Hara
 % Date: 03/17/2021 (mm/dd/yyyy)
@@ -58,11 +58,19 @@ yy = Y(:);
 zz = Z(:);
 
 [inp,~] = inpolygon(xx,yy,boundaryXYZ(:,1),boundaryXYZ(:,2));
-surfXYs = [xx(inp),yy(inp)];
+% surfXYs = [xx(inp),yy(inp)];
 
-xxp = xx(inp);
-yyp = yy(inp);
-zzp = zz(inp);
+% xxp = xx(inp);
+% yyp = yy(inp);
+% zzp = zz(inp);
+xxp = xx;
+yyp = yy;
+zzp = zz;
+surfXYs = [xx,yy];
+
+xxp(~inp) = NaN;
+yyp(~inp) = NaN;
+zzp(~inp) = NaN;
 t1 = xxp==peakX;
 t2 = yyp==peakY;
 t3 = t1.*t2;
@@ -70,10 +78,11 @@ peakI = find(t3==1,1);
 
 %% Generate Surfaces & Get Height/Volumes
 if interpSurfaces.Natural
-    boundaryInterp = scatteredInterpolant(boundaryXYZ(:,1),boundaryXYZ(:,2),boundaryXYZ(:,3),'natural');
+    boundaryInterp = scatteredInterpolant(boundaryXYZ(:,1),boundaryXYZ(:,2),boundaryXYZ(:,3),'natural','none');
     basalSurfZ = boundaryInterp(xxp,yyp);
     
     surfZs.Natural = basalSurfZ;
+    surfDEMs.Natural = GRIDobj(X,Y,reshape(basalSurfZ,size(X)));
     volcHeights.Natural = peakHeight-basalSurfZ(peakI);
     
     tmp = zzp-basalSurfZ;
@@ -82,9 +91,10 @@ if interpSurfaces.Natural
     anyHeights.Natural.Y = yyp(ii);
     anyHeights.Natural.Height = tmp(ii);
     
-    volcVols.Natural = sum(abs(basalSurfZ-zzp))*dx^2;
+    volcVols.Natural = nansum(abs(basalSurfZ-zzp))*dx^2;
 else
     surfZs.Natural = [];
+    surfDEMs.Natural = [];
     volcHeights.Natural = [];
     volcVols.Natural = [];
     anyHeights.Natural = [];
@@ -94,6 +104,7 @@ if interpSurfaces.IDW
     basalSurfZ = idw(boundaryXYZ(:,1:2),boundaryXYZ(:,3),[xxp,yyp]);
     
     surfZs.IDW = basalSurfZ;
+    surfDEMs.IDW = GRIDobj(X,Y,reshape(basalSurfZ,size(X)));
     volcHeights.IDW = peakHeight-basalSurfZ(peakI);
     
     tmp = zzp-basalSurfZ;
@@ -102,9 +113,10 @@ if interpSurfaces.IDW
     anyHeights.IDW.Y = yyp(ii);
     anyHeights.IDW.Height = tmp(ii);
     
-    volcVols.IDW = sum(abs(basalSurfZ-zzp))*dx^2;
+    volcVols.IDW = nansum(abs(basalSurfZ-zzp))*dx^2;
 else
     surfZs.IDW = [];
+    surfDEMs.IDW = [];
     volcHeights.IDW = [];
     volcVols.IDW = [];
     anyHeights.IDW = [];
@@ -116,6 +128,7 @@ if interpSurfaces.Kriging
     [basalSurfZ,~] = kriging(vstruct,boundaryXYZ(:,1),boundaryXYZ(:,2),boundaryXYZ(:,3),xxp,yyp);
 
     surfZs.Kriging = basalSurfZ;
+    surfDEMs.Kriging = GRIDobj(X,Y,reshape(basalSurfZ,size(X)));
     volcHeights.Kriging = peakHeight-basalSurfZ(peakI);
     
     tmp = zzp-basalSurfZ;
@@ -124,9 +137,10 @@ if interpSurfaces.Kriging
     anyHeights.Kriging.Y = yyp(ii);
     anyHeights.Kriging.Height = tmp(ii);
     
-    volcVols.Kriging = sum(abs(basalSurfZ-zzp))*dx^2;
+    volcVols.Kriging = nansum(abs(basalSurfZ-zzp))*dx^2;
 else
     surfZs.Kriging = [];
+    surfDEMs.Kriging = [];
     volcHeights.Kriging = [];
     volcVols.Kriging = [];
     anyHeights.Kriging = [];

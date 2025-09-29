@@ -1,4 +1,4 @@
-function [surfXYs,surfZs,maxDepth,maxVol,volcDepths,volcVols] = MorVolc_CalculateHeightVols_Crater(X,Y,Z,craterXYZ,exZ,interpSurfaces)
+function [surfXYs,surfZs,surfDEMs,maxDepth,maxVol,volcDepths,volcVols] = MorVolc_CalculateHeightVols_Crater(X,Y,Z,craterXYZ,exZ,interpSurfaces)
 % Name: MorVolc_CalculateHeightVols_Crater
 % Author: Daniel O'Hara
 % Date: 03/17/2021 (mm/dd/yyyy)
@@ -50,10 +50,17 @@ yy = Y(:);
 zz = Z(:);
 
 [inp,~] = inpolygon(xx,yy,craterXYZ(:,1),craterXYZ(:,2));
-surfXYs = [xx(inp),yy(inp)];
+% surfXYs = [xx(inp),yy(inp)];
+% 
+% xxp = xx(inp);
+% yyp = yy(inp);
+xxp = xx;
+yyp = yy;
+surfXYs = [xx,yy];
 
-xxp = xx(inp);
-yyp = yy(inp);
+xxp(~inp) = NaN;
+yyp(~inp) = NaN;
+
 t1 = xxp==lowX;
 t2 = yyp==lowY;
 t3 = t1.*t2;
@@ -65,9 +72,10 @@ if interpSurfaces.Natural
     basalSurfZ = boundaryInterp(xxp,yyp);
     
     surfZs.Natural = basalSurfZ;
+    surfDEMs.Natural = GRIDobj(X,Y,reshape(basalSurfZ,size(X)));
     volcDepths.Natural = abs(lowHeight-basalSurfZ(peakI));
     
-    volcVols.Natural = sum(abs(basalSurfZ-zz(inp)))*dx^2;
+    volcVols.Natural = sum(abs(basalSurfZ-zz))*dx^2;
 else
     surfZs.Natural = [];
     volcDepths.Natural = [];
@@ -78,9 +86,10 @@ if interpSurfaces.IDW
     basalSurfZ = idw(craterXYZ(:,1:2),craterXYZ(:,3),[xxp,yyp]);
     
     surfZs.IDW = basalSurfZ;
+    surfDEMs.IDW = GRIDobj(X,Y,reshape(basalSurfZ,size(X)));
     volcDepths.IDW = abs(lowHeight-basalSurfZ(peakI));
     
-    volcVols.IDW = sum(abs(basalSurfZ-zz(inp)))*dx^2;
+    volcVols.IDW = sum(abs(basalSurfZ-zz))*dx^2;
 else
     surfZs.IDW = [];
     volcDepths.IDW = [];
@@ -93,9 +102,10 @@ if interpSurfaces.Kriging
     [basalSurfZ,~] = kriging(vstruct,craterXYZ(:,1),craterXYZ(:,2),craterXYZ(:,3),xxp,yyp);
 
     surfZs.Kriging = basalSurfZ;
+    surfDEMs.Kriging = GRIDobj(X,Y,reshape(basalSurfZ,size(X)));
     volcDepths.Kriging = abs(lowHeight-basalSurfZ(peakI));
     
-    volcVols.Kriging = sum(abs(basalSurfZ-zz(inp)))*dx^2;
+    volcVols.Kriging = sum(abs(basalSurfZ-zz))*dx^2;
 else
     surfZs.Kriging = [];
     volcDepths.Kriging = [];

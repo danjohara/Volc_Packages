@@ -12,21 +12,25 @@ end
 
 %% Fill Most Fields if Missing
 packNumFields = {'contIter';...
-    'dx';'peakDiff';'peakContIter';...
+    'dx';'hypsIter';'peakDiff';'peakContIter';...
     'craterContIter';'summitRegion';...
     'correctCrater';'ignoreSummitIndex';...
-    'plotResults'};
+    'plotResults';'verbose';'saveInputs';...
+    'zipFiles';'deleteAfterZip';'visPlots';'xlsFile'};
 
-packEmptyFields = {'maskMap';'craterXY';...
-    'saveFigFolder';'xlsFile';'saveResFolder'};
+packEmptyFields = {'maskXY';'craterXY';...
+    'saveFigFolder';'saveResFolder';'figTitlePrefix'};
 
 packStringFields = {'figPrefix'};
 
+folderPathFields = {'saveFigFolder';'saveResFolder'};
+
 packNumVals = {-.1;...
-    30;0.05;-.1;...
+    30;-.01;0.05;-.1;...
     -.1;1;...
     1;1;...
-    0};
+    0;1;0;...
+    0;0;1;0};
 
 for i = 1:length(packNumFields)
     if ~isfield(pack,packNumFields{i})
@@ -72,5 +76,32 @@ else
     end
 end
 
+%% Fill Roughness Windows if Missing
+if ~isfield(pack,'roughnessWindows')
+    disp('WARNING: Missing field ''roughnessWindows'', filling with default value.')
+    pack.roughnessWindows = [250,500,1000,2000];
+end
+
+if ~isfield(pack,'roughnessType')
+    disp('WARNING: Missing field ''roughnessType'', filling with default value.')
+    pack.roughnessType = 'tpi';
+end
+
+if ~isfield(pack,'slopeVarianceWindows')
+    disp('WARNING: Missing field ''slopeVarianceWindows'', filling with default value.')
+    pack.slopeVarianceWindows = [250,500,1000,2000];
+end
+
+%% Test folder paths
+for i = 1:length(folderPathFields)
+    if ~isempty(folderPathFields{i})
+        evalc(sprintf('pack.%s = strrep(pack.%s,''\\'',''/'');',folderPathFields{i},folderPathFields{i}));
+        evalc(sprintf('endChar = pack.%s(end);',folderPathFields{i}));
+        if ~strcmp(endChar,'/')
+            evalc(sprintf('pack.%s(end) = ''/''',folderPathFields{i}));
+        end
+    end
+end
+
 %% Fill version
-pack.version = '6.08202023';
+pack.version = '9.08192025';

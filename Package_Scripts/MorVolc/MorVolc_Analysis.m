@@ -1,4 +1,4 @@
-function morRes = MorVolc_Analysis(pack)
+function MV_Res = MorVolc_Analysis(pack)
 %%
 % Name: MorVolc_Analysis
 % Author: Daniel O'Hara
@@ -18,15 +18,18 @@ function morRes = MorVolc_Analysis(pack)
 %
 % Input:
 %   pack: Strucure of input parameters, includes:
-%       tifFile: Tif file and path of edifice DEM.
-%       boundaryXY: Array, or .shp file and path, of edifice boundary X- and 
-%           Y-coordinates.
-%       maskMap: Cell array, or .shp file and path, of mask regions X- and 
-%           Y-coordinates to ignore in analysis.
-%       craterXY: Array, or .shp file and path, of edifice crater X- and 
-%           Y-coordinates.
+%       tifFile: .tif file to analyze. This can also be given as a
+%           pre-compiled GRIDobj object.
+%       boundaryXY: 2xN matrix or shapefile name of edifice boundary 
+%           locations. If matrix, first column is X and second column is Y.
+%       maskXY: Array, cell array, or .shp file and path, of mask regions  
+%           X- and Y-coordinates to ignore in analysis.
+%       craterXY: 2xN matrix, cell array, or shapefile name of crater 
+%           boundary location that is ignored during DEM filling. If 
+%           matrix, first column is X and second column is Y.
 %
 %       dx: Resolution of DEM (in meters).
+%
 %       peakDiff: Percentage volume difference to distinguish edifice peaks
 %           from local topographic maxima.
 %       contIter: Numerical contour interval value for contour analysis.
@@ -59,6 +62,14 @@ function morRes = MorVolc_Analysis(pack)
 %       ignoreSummitIndex: Flag to ignore summit and perform ellipticity
 %           and irregularity analysis over edifice.
 %
+%       hypsIter: Iteration value (0-1) to use for hypsometric/CDF 
+%           analysis.
+%       roughnessWindows: Window sizes (in m) to calculated roughness.
+%       roughnessType: String describing the type of roughness analysis,
+%           values given in TopoToolbox's 'roughness' script.
+%       slopeVarianceWindows: Window sizes (in m) to calculate slope
+%           variance.
+%
 %       interpSurfaces: Structure to calculate the basal and crater
 %           surfaces using a variety of interpolation values, including:
 %               Natural: Matlab natural interpolation.
@@ -70,408 +81,490 @@ function morRes = MorVolc_Analysis(pack)
 %       saveFigFolder: Folder to save analysis plots (must include '/' or 
 %           '\' at the end, and plotResults must be set to 1 to use). Set 
 %           to empty if not saving plots.
+%       saveInputs: Flag to save the inputs as a text file.
 %
 %       plotResults: Flag to plot analysis results.
+%       visPlots: Flag to determine whether plots are visible (good for
+%           running in background).
 %       figPrefix: Name prefix for all figures.
+%       figTitlePrefix: Prefix for figure titles (e.g, volcano name).
 %       saveResFolder: Folder to save output structure. Set to empty if not
 %           saving results.
+%
+%       verbose: Flag to indicate the amount of output displayed in the
+%           terminal. 0 gives no output; 1 gives broad output of each step;
+%           2 gives detailed information.
+%       zipFiles: Flag to determine whether the folders contain the results
+%           and or figures should be automatically zipped (helpful for
+%           running scripts on HPCs or for large amounts of data). 1 will 
+%           zip only the figures folder, 2 will zip only the results 
+%           folder, 3 will zip both. If the figure and result folders are 
+%           the same, everything is zipped into one folder.  
+%       deleteAfterZip: Flag to determine of folders should be
+%           automaticallly deleted after being zipped (helpful for running 
+%           scripts on HPC or for large amounts of data). 1 will delete the
+%           figures folder after zipping, 2 will delete the results folder
+%           after zipping, 3 will delete both after zipping.
 %
 % Output:
 %   morRes: Analysis results given as a structure. Fields are:
 %       GeneralParams:
 %           inputs: Script input structure.
-%           X: Grid of DEM x-coordinates.
-%           Y: Grid of DEM y-coordinates.
-%           Z: Grid of DEM elevations.
-%           DEM: GRIDobj of DEM (used by TopoToolbox).
-%           S: Grid of DEM slope values.
-%           C: Grid of DEM profile curvature values.
-%           BoundaryXYZ: Matrix of edifice boundary x, y, and z values.
-%           Summit_Contour: Elevation between main flank and summit.
-%           SummitXYZ: Matrix of summit boundary x, y, and z values.
-%           CraterXYZ: Matrix of crater boundary x, y, and z values.
-%           MaskXY: Mask region x- and y-coordinates.
-%           Basal_Surface_XY: X-Y coordinates of the edifice's basal
-%               surface.
-%           Basal_Surface_Z: Basal surface interpolated elevations for the
-%               X-Y coordinates in Basal_Surface_XY, given as a structure 
-%               which follows the interpSurfaces input.
-%           Lower_Flank_Contour: Elevation between main flank and lower
-%               flank.
-%           Lower_Flank_XY: X-Y coordinates of the lower flank boundary.
 %           Version: Analysis script version number.
 %           StartTime: DateTime object giving the time the script was
 %               started.
 %           EndTime: DateTime object giving the time the script ended.
+%
+%       GeographicParams:
+%           DEM0: Full GRIDobj of DEM (used by TopoToolbox).
+%           DEM: GRIDobj of DEM cut to the edifice.
+%
+%           boundaryXY: Volcano boundary X- and Y-coordinates.
+%           craterXY: Crater region X- and Y-coordinates.
+%           maskXY: Mask region x- and y-coordinates.
+%
+%           Slope: Grid of DEM slope values.
+%           Lower_Flank_Contour: Elevation between main flank and lower
+%               flank.
+%           Lower_Flank_XY: X-Y coordinates of the lower flank boundary.
+%           Summit_Contour: Elevation between main flank and summit.
+%           SummitXYZ: Matrix of summit boundary x, y, and z values.
+%           Basal_Surfaces: Structure of basal surfaces derived using
+%               the Natural, IDW, and Kriging methods (based on user
+%               input). Given as GRIDobjs.
+%
+%       TopoParams:
+%           Hypsometry: Structure of hypsometry values:
+%               Elevation_Hyps_Area_Values: mx2 matrix of elevation-based
+%                   hypsometry values. Second row is elevations, first row
+%                   is associated area.
+%               Slope_Hyps_Area_Values: mx2 matrix of slope-based
+%                   hypsometry values. Second row is slope, first row
+%                   is associated area.
+%               ProfileC_Hyps_Area_Values: mx2 matrix of profile curvature
+%                   hypsometry values. Second row is profile curvature, 
+%                   first row is associated area.
+%               PlanformC_Hyps_Area_Values: mx2 matrix of planform
+%                   curvature hypsometry values. Second row is planform 
+%                   curvature, first row is associated area.
+%           SlopeVariance: Structure of slope variance values:
+%               Elevation: Structure of slope variance of
+%                       elevational bins along the edifice.
+%                   Values: Matrix of values, columns are elevation bin, 
+%                       normalized elevation bin, mean slope, std slope,  
+%                       and slope variance
+%                   Titles: Cell array describing Values matrix.
+%               Windows: Indexed-structure of slope variance analysis:
+%                   SlopeVariance_Grid = Grid of roughness values.
+%                   WindowSize = Pixel-size of roughness window.
+%                   ExpectedWindowRes = Expected, user-defined roughness
+%                       window.
+%                   TrueWindowRes = Actual roughness based on grid 
+%                       resolution.
+%                   Hypsometry_Areas = Normalized area values for 
+%                       roughness.
+%                   Hypsometry_Values = Roughness CDF values.
+%                   Hypsometry_NormValues = Nomalized roughness CDF values.
+%               Total: Total slope variance of the entire edifice.
+%           Roughness: Indexed-structure of roughness analysis.
+%               Roughness_Grid = Grid of roughness values.
+%               WindowSize = Pixel-size of roughness window.
+%               ExpectedWindowRes = Expected, user-defined roughness
+%                   window.
+%               TrueWindowRes = Actual roughness based on grid resolution.
+%               Hypsometry_Areas = Normalized area values for roughness.
+%               Hypsometry_Values = Roughness CDF values.
+%               Hypsometry_NormValues = Nomalized roughness CDF values.
+%           Curvature_Grids: Structure of curvature GRIDobjs:
+%               Profile: Profile curvature GRIDobj.
+%               Planform: Planform curvature GRIDobj.
+%           Centers: Structure of center locations.
+%               Topographic_XY: X-Y location of highest topography.
+%               Geometric_XY: X-Y location of center of boundary.
+%               Volumetric_XY: X-Y location of center of volume.
+%
 %       SizeParams:
-%           Basal_Area: Area of edifice boundary.
-%           Basal_Width: Diameter of circle with area equivilant to
-%               edifice boundary.
-%           Major_Basal_Axis: Best-fitting ellipse major axis length of
-%               edifice boundary.
-%           Minor_Basal_Axis: Best-fitting ellipse minor axis length of
-%               edifice boundary.
-%           Basal_Axis_Ellipticity: Ellipticity (minor / major axis) value
-%               of the edifice boundary.
-%           Basel_Ellipse: Best-fitting ellipse of edifice boundary.
-%           Summit_Area: Area of summit boundary.
-%           Summit_Width: Diameter of circle with area equivilant to
-%               summit boundary.
-%           Summit_Basal_Axis: Best-fitting ellipse major axis length of
-%               summit boundary.
-%           Basal_Axis_Ellipticity: Ellipticity (minor / major axis) value
-%               of the summit region.
-%           Summit_Ellipse:Best-fitting ellipse of summit boundary.
-%           Peak_Height: Heights of edifice, defined as distance between 
-%               peak and basal surface under peak, given as a structure 
-%               which follows the interpSurfaces input.
-%           Any_Height: Edifice height anywhere, defined as maximum 
-%               distance between edifice and basal surface, given as a 
-%               structure which follows the interpSurfaces input.
-%           Maximum Height: Maximum height of edifice, defined as distance
-%               between peak and lowest boundary elevation.
-%           Volume: Volumes of edifice between peak and basel surface, 
-%               given as a structure which follows the interpSurfaces 
-%               input.
-%           Maximum_Volume: Maximum volume of edifice between peak and
-%               lowest boundary elevation.
-%           Minimum_Eroded_Volume: Minimum edifice eroded volume calculated
-%               as the integrated areal difference between actual
-%               topography and topography fit by a convex hull over
-%               contours.
-%           Convex_Hull_Areas: Contour and convex hull contour areas from
-%               the eroded volume analysis.
+%           Basal: Structure of parameters at the edifice base.
+%               Area: Area of edifice boundary.
+%               Width: Diameter of circle with area equivilant to
+%                   edifice boundary.
+%               Major_Axis: Best-fitting ellipse major axis length of
+%                   edifice boundary.
+%               Minor_Axis: Best-fitting ellipse minor axis length of
+%                   edifice boundary.
+%               Axis_Ellipticity: Ellipticity (minor / major axis) value
+%                   of the edifice boundary.
+%               Ellipse: Best-fitting ellipse of edifice boundary.
+%           Summit: Struvture of parameters at the edifice summit.
+%               Area: Area of summit boundary.
+%               Width: Diameter of circle with area equivilant to
+%                   summit boundary.
+%               Major_Axis: Best-fitting ellipse major axis length of
+%                   summit boundary.
+%               Minor_Axis: Best-fitting ellipse minor axis length of
+%                   summit boundary.
+%               Axis_Ellipticity: Ellipticity (minor / major axis) value
+%                   of the summit region.
+%               Ellipse:Best-fitting ellipse of summit boundary.
+%           Heights: Structure of edifice heights:
+%               Surface_to_Peak: Heights of edifice, defined as distance  
+%                   between peak and basal surface under peak, given as a  
+%                   structure based on interpSurfaces input.
+%               Maximum_From_BasalSurface: Maximum edifice height between 
+%                   the edifice and basal surface, given as a structure 
+%                   based on interpSurfaces input.
+%               Maximum_From_Boundary: Maximum height of edifice from the 
+%                   lowest edifice boundary to the peak.
+%           Volumes: Structure of edifice volumes:
+%               Total: Volumes of edifice between peak and basel surface, 
+%                   given as a structure based on interpSurfaces input.
+%               Maximum: Maximum volume of edifice between peak and
+%                   lowest boundary elevation.
+%               Minimum_Eroded_Volume: Minimum edifice eroded volume 
+%                   calculated as the integrated areal difference between 
+%                   actual topography and topography fit by a convex hull 
+%                   over contours (O'Hara & Karlstrom, 2023).
+%           ReconstructedTopo: Structure of reconstructed topography from
+%                   the convex-hull method of O'Hara & Karlstrom, 2023.
+%               Convex_Hull_Areas: Contour and convex hull contour areas 
+%                   from the eroded volume analysis.
+%               Convex_Hull_Interpolated_Surface: Grid of reconstructed
+%                   elevations from the convex hull algorithm.
+%           
 %       OrientParams:
 %           Basal_Major_Axis_Azimuth: Azimuthal direction of best-fitting
 %               edifice boundary ellipse.
 %           Summit_Major_Axis_Azimuth: Azimuthal direction of best-fitting
 %               edifice summit ellipse.
-%           Contour_Values: Contour values used for contour analysis.
-%           Contour_Major_Axis_Azimuth: Azimuthal direction of best-fitting
-%               ellipses along each contour.
+%           Contour_Elevation_Major_Axis_Azimuth: mx2 matrix of contour 
+%               elevations (first row) and azimuthal direction of 
+%               best-fitting ellipses along each contour (second row).
+%
 %       ShapeParams:
-%           Contour_Values: Contour values used for contour analysis.
-%           Contour_MaxDiam_Ellipticity_Indexes: Ellipticity indexes along 
-%               each contour using the maximum diameter of the contour.
-%           Contour_BFEllipse_Ellipticity_Indexes: Ellipticity indexes  
-%               along each contour using the contour best-fitting ellipse 
-%               major axis.
-%           Contour_MaxDiam_Irregularity_Indexes: Irregularity indexes 
-%               along each contour using the maximum diameter of the 
-%               contour.
-%           Contour_BFEllipse_Irregularity_Indexes: Irregularity indexes 
-%               along each contour using the contour best-fitting ellipse 
-%               major axis.
-%           Contour_Axis_Ellipticity: Axis ellipticity indexes
-%               (best-fitting ellipse minor axis / major axis).
-%           Mean_MaxDiam_Ellipticity_Index: Mean contour ellipticity index 
-%               using the maximum diameter of the contour.
-%           Mean_BFEllipse_Ellipticity_Index: Mean contour ellipticity  
-%               index using the contour best-fitting ellipse major axis.
-%           Mean_MaxDiam_Irregularity_Index: Mean contour irreguarity index  
-%               using the maximum diameter of the contour.
-%           Mean_BFEllipse_Irregularity_Index: Mean contour irreguarity 
-%               index using the contour best-fitting ellipse major axis.
-%           Mean_Ellipse_Ellipticity: Mean ellipse axis ellipticity value.
-%           Height_BasalWidth: Ratio between edifice height and basal
-%               width.
-%           SummitWidth_BasalWidth: Ratio between summit width and basal
-%               width.
-%           Contour_Ellipses: Best-fitting ellipses along each contour.
+%           Contour: Structure of contour-based values.
+%               Elevations: Contour values used for contour analysis.
+%               Ellipses: Best-fitting ellipses along each contour.
+%               Axis_Ellipticity: Axis ellipticity indexes
+%                   (best-fitting ellipse minor axis / major axis).
+%               Ellipticity_Indices: Structure of ellipticity indices 
+%                       broken down by methodology:
+%                   MaxDiameter: Ellipticity index using the maximum 
+%                       diameter of the contour (from Grosse et al., 2012).
+%                   BFEllipse: Ellipticity index using the contour's 
+%                       best-fitting ellipse major axis.
+%               Irregularity_Indices: Structure of irregularity indices 
+%                       broken down by methodology:
+%                   MaxDiameter: Irregularity index using the maximum 
+%                       diameter of the contour (from Grosse et al., 2012).
+%                   BFEllipse: Irregularity index using the contour's 
+%                       best-fitting ellipse major axis.
+%           Mean_Shapes: Structure of average values over all contours:
+%               Ellipticity_Index: Structure of mean contour ellipticity 
+%                       index broken down by methodology:
+%                   MaxDiameter: Mean value of max diameter indices.
+%                   BFEllipse: Mean value of best-fitting ellipse indices.
+%               Irregularity_Index: Structure of mean contour irregularity 
+%                       index broken down by methodology:
+%                   MaxDiameter: Mean value of max diameter indices.
+%                   BFEllipse: Mean value of best-fitting ellipse indices.
+%               Ellipse_Ellipticity: Mean ellipse ellipticity (best-fitting 
+%                   ellipse minor axis / major axis).
+%           Geometry: Structure of geometric values:
+%               Height_BasalWidth: Ratio between edifice height and basal
+%                   width, seperated by edifice height derived from basal
+%                   surface as given by user input.
+%               SummitWidth_BasalWidth: Ratio between summit width and 
+%                   basal width.
 %           Skewness: Edifice X-Y skewness.
 %           Kurtosis: Edifice X-Y kurtosis.
+%
 %       SlopeParams:
-%           WholeEdifice_Mean_Slope: Mean slope of entire edifice.
-%           WholeEdifice_Median_Slope: Median slope of entire edifice.
-%           WholeEdifice_Std_Slope: Standard deviation slope of entire
-%               edifice.
-%           Flank_Mean_Slope: Mean slope of main edifice flank region.
-%           Flank_Median_Slope: Median slope of main edifice flank 
-%               region.
-%           Flank_Std_Slope: Standard deviation slope of main edifice flank
-%               region.
-%           Lower_Flank_Mean_Slope: Mean slope of lower edifice flank 
-%               region.
-%           Lower_Flank_Median_Slope: Median slope of lower edifice flank 
-%               region.
-%           Lower_Flank_Std_Slope: Standard deviation slope of lower
-%               edifice flank region.
-%           Summit_Mean_Slope: Mean slope of the summit region.
-%           Summit_Median_Slope: Median slope of the summit region.
-%           Summit_Std_Slope: Standard deviation slope of summit region.
-%           Contour_Values: Contour values used for contour analysis.
-%           Contour_Mean_Slopes: Mean slope along each contour.
-%           Contour_Median_Slopes: Median slope along each contour.
-%           Contour_Min_Slopes: Min slope along each contour.
-%           Contour_Max_Slopes: Max slope along each contour.
-%           Contour_Max_Mean_Slope: Maximum mean slope of all contours.
-%           Contour_Max_Median_Slope: Maximum median slope of all contours.
-%           Max_Slope_Height: Elevation of the highest mean slope contour.
-%           Max_Slope_Height_Fraction: Percentage of maximum mean slope 
-%               elevation compared to entire edifice relief. 
-%           Max_Slope: Maximum mean contour slope value.
+%           Full_Edifice: Structure of slope values considering the entire
+%                   edifice:
+%               Mean: Mean slope.
+%               Median: Median slope.
+%               Std: Slope standard deviation.
+%           Lower_Flank: Structure of slope values considering the lower
+%                   edifice flank (region between lowest and highest 
+%                   edifice boundaries):
+%               Mean: Mean slope.
+%               Median: Median slope.
+%               Std: Slope standard deviation.
+%           Main_Flank: Structure of slope values considering the main
+%                   edifice flank (region between highest edifice boundary 
+%                   and summit):
+%               Mean: Mean slope.
+%               Median: Median slope.
+%               Std: Slope standard deviation.
+%           Summit: Structure of slope values considering the edifice
+%                   summmit:
+%               Mean: Mean slope.
+%               Median: Median slope.
+%               Std: Slope standard deviation.
+%           Contour: Structure of contour slope values.
+%               Elevations: Contour elevations.
+%               Mean: Mean slope along each contour.
+%               Median: Median slope along each contour.
+%               Min: Min slope along each contour.
+%               Max: Max slope along each contour.
+%               Std: Slope standard deviation along each contour.
+%               Maximum_Mean: Maximum mean slope of all contours.
+%               Maximum_Median: Maximum median slope of all contours.
+%           Maximum_Slope: Structure of information related to maximum
+%                   contour slope.
+%               Elevation: Elevation (above sea level) maximum contour  
+%                   slope.
+%               Height: Height (from edifice base) of the maximum contour 
+%                   slope.
+%               Height_Fraction: Percentage of maximum contour slope height
+%                   compared to entire edifice relief. 
+%               Slope: Maximum mean contour slope value.
+%
+%       RoughnessParams:
+%           Full_Edifice: Structure of roughness value parameters for the 
+%                   entire edifice.
+%               Mean: 1xn array of mean roughness values, where n is the
+%                   number of provided roughness windows.
+%               Median: 1xn array of median roughness values, where n is 
+%                   the number of provided roughness windows.
+%               Std: 1xn array of roughness value standard deviations, 
+%                   where n is the number of provided roughness windows.
+%           Lower_Flank: Structure of roughness value parameters for the 
+%                   lower edifice flank (region between the lowest and 
+%                   highest edifice boundary).
+%               Mean: 1xn array of mean roughness values, where n is the
+%                   number of provided roughness windows.
+%               Median: 1xn array of median roughness values, where n is 
+%                   the number of provided roughness windows.
+%               Std: 1xn array of roughness value standard deviations, 
+%                   where n is the number of provided roughness windows.
+%           Main_Flank: Structure of roughness value parameters for the 
+%                   main edifice flank (region between the highest edifice 
+%                   boundary and summit).
+%               Mean: 1xn array of mean roughness values, where n is the
+%                   number of provided roughness windows.
+%               Median: 1xn array of median roughness values, where n is 
+%                   the number of provided roughness windows.
+%               Std: 1xn array of roughness value standard deviations, 
+%                   where n is the number of provided roughness windows.
+%           Summit: Structure of roughness value parameters for the 
+%                   edifice summit.
+%               Mean: 1xn array of mean roughness values, where n is the
+%                   number of provided roughness windows.
+%               Median: 1xn array of median roughness values, where n is 
+%                   the number of provided roughness windows.
+%               Std: 1xn array of roughness value standard deviations, 
+%                   where n is the number of provided roughness windows.
+%           Contour: Structure of roughness values for each contour:
+%               Elevations: Contour elevations.
+%               Mean: Mean roughness along each contour for each window.
+%               Median: Median roughness along each contour for each 
+%                   window.
+%               Min: Min roughness along each contour for each window.
+%               Max: Max roughness along each contour for each window.
+%               Std: Roughness standard deviation along each contour.
+%               Maximum_Mean: Maximum mean roughness of all contours for 
+%                   each window.
+%               Maximum_Median: Maximum median roughness of all contours 
+%                   for each window.
+%
+%       WindowedSlopeVarianceParams:
+%           Full_Edifice: Structure of windowed slope variance (WSV) value 
+%                   parameters for the entire edifice.
+%               Mean: 1xn array of mean WSV values, where n is the
+%                   number of provided WSV windows.
+%               Median: 1xn array of median WSV values, where n is 
+%                   the number of provided WSV windows.
+%               Std: 1xn array of WSV value standard deviations, 
+%                   where n is the number of provided WSV windows.
+%           Lower_Flank: Structure of WSV value parameters for the 
+%                   lower edifice flank (region between the lowest and 
+%                   highest edifice boundary).
+%               Mean: 1xn array of mean WSV values, where n is the
+%                   number of provided WSV windows.
+%               Median: 1xn array of median WSV values, where n is 
+%                   the number of provided WSV windows.
+%               Std: 1xn array of WSV value standard deviations, 
+%                   where n is the number of provided WSV windows.
+%           Main_Flank: Structure of WSV value parameters for the 
+%                   main edifice flank (region between the highest edifice 
+%                   boundary and summit).
+%               Mean: 1xn array of mean WSV values, where n is the
+%                   number of provided WSV windows.
+%               Median: 1xn array of median WSV values, where n is 
+%                   the number of provided WSV windows.
+%               Std: 1xn array of WSV value standard deviations, 
+%                   where n is the number of provided WSV windows.
+%           Summit: Structure of WSV value parameters for the 
+%                   edifice summit.
+%               Mean: 1xn array of mean WSV values, where n is the
+%                   number of provided WSV windows.
+%               Median: 1xn array of median WSV values, where n is 
+%                   the number of provided WSV windows.
+%               Std: 1xn array of WSV value standard deviations, 
+%                   where n is the number of provided WSV windows.
+%           Contour: Structure of WSV values for each contour:
+%               Elevations: Contour elevations.
+%               Mean: Mean WSV along each contour for each window.
+%               Median: Median WSV along each contour for each window.
+%               Min: Min WSV along each contour for each window.
+%               Max: Max WSV along each contour for each window.
+%               Std: WSV standard deviation along each contour.
+%               Maximum_Mean: Maximum mean WSV of all contours for 
+%                   each window.
+%               Maximum_Median: Maximum median WSV of all contours 
+%                   for each window.
+%
 %       CraterParams:
-%           Crater_Area: Area of crater boundary.
-%           Crater_Width: Diameter of circle with area equivilant to
-%               crater boundary.
-%           Crater_Major_Axis: Best-fitting ellipse major axis length of
-%               crater boundary.
-%           Crater_Minor_Axis: Best-fitting ellipse minor axis length of
-%               crater boundary.
-%           Crater_Ellipse: Best-fitting ellipse of crater boundary.
-%           Crater_Major_Axis_Azimuth: Azimuthal direction of best-fitting 
-%               crater boundary ellipse.
-%           Crater_Depth: Depths of crater, defined as distance between 
-%               crater minima and surface over minima, given as a structure 
-%               which follows the interpSurfaces input.
-%           Crater_Maximum_Depth: Maximum depth of crater, defined as 
-%               distance between the crater minima and highest boundary 
-%               elevation.
-%           Crater_Volume: Volumes of crater between crater minima and 
-%               crater surface, given as a structure which follows the 
-%               interpSurfaces input.
-%           Crater_Maximum_Volume: Maximum volume of crater between minima 
-%               and highest boundary elevation.
-%           Crater_MaxDiam_Ellipticity_Indexes: Ellipticity index of the 
-%               crater using the maximum diameter.
-%           Crater_BFEllipse_Ellipticity_Indexes: Ellipticity index  
-%               of the crater using the best-fitting ellipse major axis.
-%           Crater_MaxDiam_Irregularity_Indexes: Irregularity index 
-%               of the crater using the maximum diameter.
-%           Crater_BFEllipse_Irregularity_Indexes: Irregularity index 
-%               of the crater using the best-fitting ellipse major axis.
-%           Crater_Mean_Slope: Mean slope within crater.
-%           Crater_Median_Slope: Median slope within crater.
-%           Crater_Contour_Stats: Contour statistics within the crater,
-%               containing investigated contour value, mean slope, median
-%                slope, min slope, and max slope.
-%           CraterDepth_CraterWidth: Ratio between crater depth and crater
-%               width.
-%           CraterWidth_BasalWidth: Ratio between crater width and basal
-%               width.
-%           CraterDepth_BasalHeight: Ratio between crater depth and edifice
-%               height.
-%           Crater_Axis_Ellipticity: Ellipse axis ellipticity value.
-%           Crater_Surface_XY: X-Y coordinates of the crater's surface.
-%           Crater_Surface_Z: Surface interpolated elevations for the
-%               X-Y coordinates in Crater_Surface_XY, given as a structure 
-%               which follows the interpSurfaces input.
+%           Size: Structure of crater size parameters, similar to SizeParam
+%                   structure:
+%               Area: Area of crater boundary.
+%               Width: Diameter of circle with area equivilant to
+%                   crater boundary.
+%               Major_Axis: Best-fitting ellipse major axis length of
+%                   crater boundary.
+%               Minor_Axis: Best-fitting ellipse minor axis length of
+%                   crater boundary.
+%               Axis_Ellipticity: Ellipse axis ellipticity value.
+%               Ellipse: Best-fitting ellipse of crater boundary.
+%               Depth: Structure of crater depth parameters:
+%                   Total: Depths of crater, defined as distance between 
+%                       crater minima and surface over minima, given as a  
+%                       structure which follows the interpSurfaces input.
+%                   Maximum: Maximum depth of crater, defined as 
+%                       distance between the crater minima and highest  
+%                       boundary elevation.
+%               Volume: Structure of crater depth parameters:
+%                   Total: Volumes of crater between crater minima and 
+%                       crater surface, given as a structure which follows
+%                       the interpSurfaces input.
+%                   Maximum: Maximum volume of crater between minima 
+%                       and highest boundary elevation.
+%           Orientation: Structure of crater orientation parameters, 
+%                   similar to OrientParams structure:
+%               Major_Axis_Azimuth: Azimuthal direction of best-fitting 
+%                   crater boundary ellipse.
+%           Shape: Structure of crater shape parameters, similar to 
+%                   ShapeParams structure:
+%               Ellipticity_Index: Structure of crater ellipticity index,
+%                       broken down by methodology.
+%                   MaxDiameter: Ellipticity index of the crater using the 
+%                       maximum diameter (from Grosse et al., 2012).
+%                   BFEllipse: Ellipticity index  of the crater using the 
+%                       best-fitting ellipse major axis.
+%               Irregularity_Index: Structure of crater irregularity index,
+%                       broken down by methodology.
+%                   MaxDiameter: Irregularity index of the crater using the 
+%                       maximum diameter (from Grosse et al., 2012).
+%                   BFEllipse: Irregularity index  of the crater using the 
+%                       best-fitting ellipse major axis.
+%               Geometry: Structure of crater geometry values:
+%                   CraterDepth_CraterWidth: Ratio between crater depth and 
+%                       crater width.
+%                   CraterWidth_BasalWidth: Ratio between crater width and 
+%                       basal width.
+%                   CraterDepth_BasalHeight: Ratio between crater depth and 
+%                       edifice height.
+%           Slope: Structure of crater shape parameters, similar to 
+%                   SlopeParams structure:
+%               Mean: Mean slope within crater.
+%               Median: Median slope within crater.
+%               Contour: Cell array of contour statistics within the crater:
+%                   Elevations: Contour elevations.
+%                   Mean: Mean slope along each contour.
+%                   Median: Median slope along each contour.
+%                   Min: Min slope along each contour.
+%                   Max: Max slope along each contour.
+%                   Std: Slope standard deviation along each contour.
+%                   Maximum_Mean: Maximum mean slope of all contours.
+%                   Maximum_Median: Maximum median slope of all contours.
+%               Crater_Surfaces: Structure of filled-in crater surfaces 
+%                   derived using the Natural, IDW, and Kriging methods 
+%                   (based on user input). Given as GRIDobjs.
+%
 %       PeakParams: 
-%           Summit_Contour_Peak_Count: Number of contour-based 'peaks' in   
-%               the edifice summit region.
-%           Summit_Contour_Peak_XYZ: XYZ coordinates of contour-based
-%               'peaks' in the edifice summit region.
-%           Main_Flank_Contour_Peak_Count: Number of contour-based 'peaks'   
-%               in the edifice main flank region.
-%           Main_Flank_Contour_Peak_XYZ: XYZ coordinates of contour-based
-%               'peaks' in the edifice main flank region.
-%           Lower_Flank_Contour_Peak_Count: Number of contour-based 'peaks'    
-%               in the edifice lower flank region.
-%           Lower_Flank_Contour_Peak_XYZ: XYZ coordinates of contour-based
-%               'peaks' in the edifice main lower region.
-%           Summit_Local_Peak_Count: Number of local maxima 'peaks' in the 
-%               edifice summit region.
-%           Summit_Local_Peak_XYZ: XYZ coordinates of local maxima 'peaks'
-%               in the edifice summit region.
-%           Main_Flank_Local_Peak_Count: Number of local maxima 'peaks' in   
-%               the edifice main flank region.
-%           Main_Flank_Local_Peak_XYZ: XYZ coordinates of local maxima
-%               'peaks' in the edifice main flank region.
-%           Lower_Flank_Local_Peak_Count: Number of local maxima 'peaks' in    
-%               the edifice lower flank region.
-%           Lower_Flank_Local_Peak_XYZ: XYZ coordinates of local maxima
-%               'peaks' in the edifice lower flank region.
+%           Full_Edifice: Structure of identified peaks for the entire 
+%                   edifice, broken down by peak identification type.
+%               Contour: Structure of peaks identified by the contour
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
+%               Local: Structure of peaks identified by the locality
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
+%           Lower_Flank: Structure of identified peaks for the lower 
+%                   edifice flank (region between the lowest and highest 
+%                   edifice boundary), broken down by peak identification 
+%                   type.
+%               Contour: Structure of peaks identified by the contour
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
+%               Local: Structure of peaks identified by the locality
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
+%           Main_Flank: Structure of identified peaks for the main 
+%                   edifice flank (region between the highest edifice  
+%                   boundar and summit), broken down by peak identification 
+%                   type.
+%               Contour: Structure of peaks identified by the contour
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
+%               Local: Structure of peaks identified by the locality
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
+%           Summit: Structure of identified peaks for the edifice summit, 
+%                   broken down by peak identification type.
+%               Contour: Structure of peaks identified by the contour
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
+%               Local: Structure of peaks identified by the locality
+%                       method.
+%                   Count: Number of peaks.
+%                   XYZ: Peak X-Y-Z coordinates.
 
 %% Unwrap Package
 pack = MorVolc_DefaultVals(pack);
-disp(sprintf('USING MORVOLC VERSION %s',pack.version))
-disp('Unpacking Input and Importing Data...')
+if pack.verbose > 0
+    disp(sprintf('USING MORVOLC VERSION %s',pack.version))
+    disp('Unpacking Input and Importing Data...')
+end
 
-morRes = [];
-morRes.GeneralParams.inputs = pack;
+MV_Res = [];
+MV_Res.GeneralParams.inputs = pack;
 
-tifFile = pack.tifFile;
-boundaryXYZ = pack.boundaryXY;
-contIter = pack.contIter;
-maskRegions = pack.maskMap;
 dx = pack.dx;
-peakDiff = pack.peakDiff;
-craterXYZ = pack.craterXY;
-craterContIter = pack.craterContIter;
-peakContIter = pack.peakContIter;
-plotResults = pack.plotResults;
-saveFigFolder = pack.saveFigFolder;
-saveResFolder = pack.saveResFolder;
-figPrefix = pack.figPrefix;
-interpSurfaces = pack.interpSurfaces;
-xlsFile = pack.xlsFile;
-correctCrater = pack.correctCrater;
 summitRegion = pack.summitRegion;
-ignoreSummitIndex = pack.ignoreSummitIndex;
 
-morRes.GeneralParams.Version = pack.version;
-morRes.GeneralParams.StartTime = datetime('now');
+MV_Res.GeneralParams.Version = pack.version;
+MV_Res.GeneralParams.StartTime = datetime('now');
 
-MorVolc_CheckIters(contIter,craterXYZ,craterContIter,peakContIter)
+MorVolc_CheckIters(pack.contIter,pack.craterXY,pack.craterContIter,pack.peakContIter)
+minEllipsePoints = 5;
+ellIndMax = 3;
+irrIndMax = 2;
+irrIndMin = 1;
 
-%% Setup
-% If boundary is given as shapefile, convert to an array.
-if ischar(boundaryXYZ)
-    Sh = shaperead(boundaryXYZ);
-    tx = Sh.X;
-    ty = Sh.Y;
-    if isnan(tx(end))
-        tx = tx(1:end-1);
-        ty = ty(1:end-1);
-    end
-    
-    if nansum((abs(tx)>180)*1) == 0 || nansum((abs(ty)>90)*1) == 0
-        try
-            [ttx,tty,~] = ll2utm(ty,tx);
-            boundaryXYZ = [ttx',tty'];
-        catch
-            warning('Unable to convert boundary from Lat/Lon, assuming already in UTM')
-            boundaryXYZ = [tx',ty'];
-        end
-    else
-        boundaryXYZ = [tx',ty'];
-    end
-    
-    
-    boundaryXYZ = double(boundaryXYZ);
-end
-
-% If crater is given as shapefile, convert to cell array.
-if ischar(craterXYZ)
-    Sh = shaperead(craterXYZ);
-    craterXYZ = {};
-    for i = 1:size(Sh,1)
-        tx = Sh(i).X;
-        ty = Sh(i).Y;
-        if isnan(tx(end))
-            tx = tx(1:end-1);
-            ty = ty(1:end-1);
-        end
-
-        if nansum((abs(tx)>180)*1) == 0 || nansum((abs(ty)>90)*1) == 0
-            try
-                [ttx,tty,~] = ll2utm(ty,tx);
-                txyz = [ttx',tty'];
-            catch
-                warning('Unable to convert crater from Lat/Lon, assuming already in UTM')
-                txyz = [tx',ty'];
-            end
-        else
-            txyz = [tx',ty'];
-        end
-        
-        craterXYZ = [craterXYZ;{double(txyz)}];
-    end
-elseif ~isempty(craterXYZ) && ~iscell(craterXYZ)
-    craterXYZ = {craterXYZ};
-end
-
-% If mask given as shapefile, convert to array
-maskXY = {};
-if ischar(maskRegions)
-    Sh = shaperead(maskRegions);
-    for i = 1:length(Sh)
-        tx = Sh(i).X;
-        ty = Sh(i).Y;
-        if isnan(tx(end))
-            tx = tx(1:end-1);
-            ty = ty(1:end-1);
-        end
-
-        if nansum((abs(tx)>180)*1) == 0 || nansum((abs(ty)>90)*1) == 0
-            try
-                [ttx,tty,~] = ll2utm(ty,tx);
-                maskXY = [maskXY,{[ttx',tty']}];
-            catch
-                warning('Unable to convert mask region from Lat/Lon, assuming already in UTM')
-                maskXY = [maskXY,{double([tx',ty'])}];
-            end
-        else
-            maskXY = [maskXY,{double([tx',ty'])}];
-        end
-    end
-elseif isempty(maskRegions)
-    maskXY = {};
-elseif ~iscell(maskRegions)
-    maskXY = {maskRegions};
-else
-    maskXY = maskRegions;
-end
+%% Import Shapefiles
+[boundaryXYZ,craterXYZ,maskXY] = Import_Shapefiles(pack.boundaryXY,pack.craterXY,pack.maskXY,pack.verbose);
 
 %% Load Tif file, isolate volcano
-disp('Loading DEM...')
-if ischar(tifFile)
-    warning('off','all')
-    DEM = GRIDobj(tifFile);
-    warning('on','all')
-
-    if abs(DEM.refmat(3,1)) <= 180 || abs(DEM.refmat(3,2)) <= 90
-        try
-            DEM = reproject2utm(DEM,dx);
-        catch
-            warning('Cannot reproject DEM to UTM, assuming map is already in coordinates.')
-            DEM.Z(DEM.Z<0) = NaN;
-            DEM = resample(DEM,dx);
-        end
-    else
-        DEM.Z(DEM.Z<0) = NaN;
-        DEM = resample(DEM,dx);
-    end
-else
-    DEM = tifFile;
-end
-
-morRes.GeneralParams.DEM = DEM;
-[Z0,x,y] = GRIDobj2mat(DEM);
+[DEM0,x0,y0,Z0,DEM,x,y,Z] = Import_DEM(pack.tifFile,dx,0,boundaryXYZ,craterXYZ,maskXY,pack.verbose);
 [X,Y] = meshgrid(x,y);
-X = double(X);
-Y = double(Y);
+[X0,Y0] = meshgrid(x0,y0);
 
-% Crop DEM to boundary 
-disp('Clipping Topography...')
-bf = scatteredInterpolant(double(X(:)),double(Y(:)),double(Z0(:)),'linear','linear');
+%% Update Z values in boundary
+bf = scatteredInterpolant(X0(:),Y0(:),Z0(:),'linear','linear');
 bz = bf(boundaryXYZ(:,1),boundaryXYZ(:,2));
+boundaryXYZ = [boundaryXYZ,bz];
 
-% bz = interp2(X,Y,Z0,boundaryXYZ(:,1),boundaryXYZ(:,2),'linear','linear');
-boundaryXYZ = [boundaryXYZ,double(bz)];
-% boundaryXYZ(sum(isnan(boundaryXYZ),2)>0,:) = [];
-p = inpolygon(X,Y,boundaryXYZ(:,1),boundaryXYZ(:,2));
-DEM.Z(~p) = NaN;
-DEM = crop(DEM);
-
-% Generate X,Y,Z,slope, curvature grids
-[Z0,x,y] = GRIDobj2mat(DEM);
-Z = Z0;
-[X,Y] = meshgrid(x,y);
-X = double(X);
-Y = double(Y);
-Z = double(Z);
-S = gradient8(DEM,'deg');
-C = curvature(DEM);
-[S,~,~] = GRIDobj2mat(S);
-[C,~,~] = GRIDobj2mat(C);
-
-% Set everything outside of edifice to NaN.
-p = inpolygon(X,Y,boundaryXYZ(:,1),boundaryXYZ(:,2));
-Z(~p) = NaN;
-S(~p) = NaN;
-C(~p) = NaN;
-
-morRes.GeneralParams.X = X;
-morRes.GeneralParams.Y = Y;
-morRes.GeneralParams.Z = Z;
-morRes.GeneralParams.S = S;
-morRes.GeneralParams.C = C;
-
-% Correct craters and create crater-masked slope grid
-S_nocrater = S;
-for i = 1:length(craterXYZ) 
-    if correctCrater
+for i = 1:length(craterXYZ)
+    if pack.correctCrater
         tDEM = fillsinks(DEM,5);
         tF = FLOWobj(tDEM,'preprocess','none');
         dd = drainagebasins(tF);
@@ -483,34 +576,50 @@ for i = 1:length(craterXYZ)
         ti = find(abs(y-my)==min(abs(y-my)));
         bb = bwboundaries(dd==dd(ti,tj));
         txyz = [];
-        for j = 1:size(bb{1}(:,1))
+        for j = 1:size(bb{1}(:,1),1)
             txyz = [txyz;x(bb{1}(j,2)),y(bb{1}(j,1))];
         end 
     else
         txyz = craterXYZ{i}(:,1:2);
     end
 
-    tz = interp2(X,Y,Z0,txyz(:,1),txyz(:,2));
+    tz = interp2(X0,Y0,Z0,txyz(:,1),txyz(:,2));
     craterXYZ{i} = double([txyz,tz]);
+end
+
+MV_Res.GeographicParams.boundaryXYZ = boundaryXYZ;
+MV_Res.GeographicParams.craterXYZ = craterXYZ;
+MV_Res.GeographicParams.maskXY = maskXY;
+
+MV_Res.GeographicParams.DEM0 = DEM0;
+MV_Res.GeographicParams.DEM = DEM;
+
+%% Create crater-masked slope grid
+S = gradient8(DEM,'degree');
+[SG,~,~] = GRIDobj2mat(S);
+S_nocrater = SG;
+for i = 1:length(craterXYZ) 
+    txyz = craterXYZ{i}(:,1:2);
 
     p = inpolygon(X,Y,txyz(:,1),txyz(:,2));
     S_nocrater(p==1) = NaN;
 end
 
-%% Determine Contour Interval & Lower Flank Boundary
-disp('Determing contours and lower flank boundary...')
+MV_Res.GeographicParams.Slope = S;
 
-if length(contIter) == 1
-    if contIter < 0 && contIter > -1
-%         trueCont = abs(contIter)*range(Z(:));
-        trueCont = round(abs(contIter)*range(Z(:)),2);
+%% Determine Contour Interval & Lower Flank Boundary
+if pack.verbose > 0
+    disp('Determing contours and lower flank boundary...')
+end
+
+if length(pack.contIter) == 1
+    if pack.contIter < 0 && pack.contIter > -1
+        trueCont = round(abs(pack.contIter)*range(Z(:)),2);
     else
-%         trueCont = contIter;
-        trueCont = round(contIter,2);
+        trueCont = round(pack.contIter,2);
     end
 
     % Determine contours
-%     tmpConts = round(nanmin(boundaryXYZ(:,3))):round(nanmin(boundaryXYZ(:,3)))+trueCont;
     tmpConts = round(nanmin(boundaryXYZ(:,3)),2):trueCont:round(nanmin(boundaryXYZ(:,3)),2)+trueCont;
     tmp = mod(tmpConts,trueCont);
     tmpI = find(tmp==0,1);
@@ -519,12 +628,12 @@ if length(contIter) == 1
     end
     conts = [tmpConts(tmpI)-trueCont:trueCont:max(Z(:))+trueCont]';
 else
-    conts = zeros(length(contIter),1);
-    for i = 1:length(contIter)
-        if contIter(i) < 0 && contIter(i) > -1
-            conts(i) = round(abs(contIter(i))*range(Z(:)),2);
+    conts = zeros(length(pack.contIter),1);
+    for i = 1:length(pack.contIter)
+        if pack.contIter(i) < 0 && pack.contIter(i) > -1
+            conts(i) = round(abs(pack.contIter(i))*range(Z(:)),2);
         else
-            conts(i) = contIter(i);
+            conts(i) = pack.contIter(i);
         end
     end
     trueCont = mean(diff(conts));
@@ -566,8 +675,142 @@ if isnan(LowFlankZ)
     LowFlankZ = nanmin(boundaryXYZ(:,3));
 end
 
+%% Generate basic topography metrics
+if pack.verbose > 0
+    disp('Calculating Topography Metrics...')
+    disp('   Hypsometry...')
+end
+
+% Hypsome3try
+[ZHyps_Areas,ZHyps_Vals] = HypsometryValue(DEM.Z,pack.hypsIter,1);
+MV_Res.TopoParams.Hypsometry.Elevation_Hyps_Areas_Values = [ZHyps_Areas',ZHyps_Vals'];
+
+% Slope
+if pack.verbose > 0
+    disp('   Slope...')
+end
+[Slope_Hyps_Areas,Slope_Hyps_Vals] = HypsometryValue(SG,pack.hypsIter,0);
+MV_Res.TopoParams.Hypsometry.Slope_Hyps_Areas_Values = [Slope_Hyps_Areas',Slope_Hyps_Vals'];
+
+
+% Slope Variance - Windows
+if pack.verbose > 0
+    disp('   Windowed Slope Variance...')
+end
+slopeVarianceVals = [];
+for i = 1:length(pack.slopeVarianceWindows)
+    if pack.verbose > 1
+        disp(sprintf('      Window %d / %d',i,length(pack.slopeVarianceWindows)))
+    end
+    slVarI = round(pack.slopeVarianceWindows(i)/dx,0);
+    if mod(slVarI,2) == 0
+        slVarI = slVarI+1;
+    end
+
+    slVarGrid = CalculateSlopeVarianceWindow(S,slVarI);
+
+    [slVarHypsAreas,slVarHypsVals] = HypsometryValue(slVarGrid.Z,pack.hypsIter,0);
+    [~,slVarHypsNorm] = HypsometryValue(slVarGrid.Z,pack.hypsIter,1);
+    
+    slopeVarianceVals(i).SlopeVariance_Grid = slVarGrid;
+    slopeVarianceVals(i).WindowSize = [slVarI,slVarI];
+    slopeVarianceVals(i).ExpectedWindowRes = pack.slopeVarianceWindows(i);
+    slopeVarianceVals(i).TrueWindowRes = slVarI*dx;
+    slopeVarianceVals(i).Hypsometry_Areas = slVarHypsAreas;
+    slopeVarianceVals(i).Hypsometry_Values = slVarHypsVals;
+    slopeVarianceVals(i).Hypsometry_NormValues = slVarHypsNorm;
+end
+
+% Slope Variance - Contours
+if pack.verbose > 0
+    disp('   Contour Slope Variance...')
+end
+[slVarTable,slVarTitles] = CalculateSlopeVarianceElevation(DEM,S,conts);
+MV_Res.TopoParams.SlopeVariance.Elevation.Values = slVarTable;
+MV_Res.TopoParams.SlopeVariance.Elevation.Titles = slVarTitles;
+
+MV_Res.TopoParams.SlopeVariance.Windows = slopeVarianceVals;
+MV_Res.TopoParams.SlopeVariance.Total = nanstd(SG(:))./nanmean(SG(:));
+
+% Curvature
+if pack.verbose > 0
+    disp('   Curvature...')
+end
+curve_prof = curvature(DEM,'profc');
+curve_plan = curvature(DEM,'planc');
+
+[CProf_Hyps_Areas,CProf_Hyps_Vals] = HypsometryValue(curve_prof.Z,pack.hypsIter*.1,0);
+[CPlan_Hyps_Areas,CPlan_Hyps_Vals] = HypsometryValue(curve_plan.Z,pack.hypsIter*.1,0);
+
+MV_Res.TopoParams.Curvature_Grids.Profile = curve_prof;
+MV_Res.TopoParams.Curvature_Grids.Planform = curve_plan;
+
+MV_Res.TopoParams.Hypsometry.ProfileC_Hyps_Areas_Values = [CProf_Hyps_Areas',CProf_Hyps_Vals'];
+MV_Res.TopoParams.Hypsometry.PlanformC_Hyps_Areas_Values = [CPlan_Hyps_Areas',CPlan_Hyps_Vals'];
+
+% Roughness
+if pack.verbose > 0
+    disp('   Roughness...')
+end
+roughnessVals = [];
+for i = 1:length(pack.roughnessWindows)
+    if pack.verbose > 1
+        disp(sprintf('      Window %d / %d',i,length(pack.roughnessWindows)))
+    end
+    roughI = round(pack.roughnessWindows(i)/dx,0);
+    if mod(roughI,2) == 0
+        roughI = roughI+1;
+    end
+    roughGrid = roughness(DEM,pack.roughnessType,[roughI,roughI]);
+    [roughHypsAreas,roughHypsVals] = HypsometryValue(roughGrid.Z,pack.hypsIter,0);
+    [~,roughHypsNorm] = HypsometryValue(roughGrid.Z,pack.hypsIter,1);
+    
+    roughnessVals(i).Roughness_Grid = roughGrid;
+    roughnessVals(i).WindowSize = [roughI,roughI];
+    roughnessVals(i).ExpectedWindowRes = pack.roughnessWindows(i);
+    roughnessVals(i).TrueWindowRes = roughI*dx;
+    roughnessVals(i).Hypsometry_Areas = roughHypsAreas;
+    roughnessVals(i).Hypsometry_Values = roughHypsVals;
+    roughnessVals(i).Hypsometry_NormValues = roughHypsNorm;
+end
+
+MV_Res.TopoParams.Roughness = roughnessVals;
+
+% Topographic, Geometric, and Volumetric Centers
+%   Topographic Center (peak)
+if pack.verbose > 0
+    disp('   Landform Centers...')
+end
+[ii,jj] = find(Z==max(Z(:)),1);
+TC_X = X(ii,jj);
+TC_Y = Y(ii,jj);
+
+%   Geometric Center (planform center of volcano)
+%       The moments script calculates the volume-based mathmatical moments
+%       of the elevation grid. Using 1 for all elevations within the
+%       volcano removes the topographic weighting of the moments. This is
+%       equivilant to taking the mean X and Y of all elevation coordinates.
+tt = ~isnan(Z)*1;
+[~,~,~,~,~,com,~,~] = Calculate_Moments(x,y,tt);
+GC_X = com(1);
+GC_Y = com(2);
+
+%   Volumetric Center (volumetric center of mass, see Lerner et al. 2020 for
+%       formal equation and description of use.
+Z(isnan(Z)) = 0;
+[~,~,~,~,~,com,~,~] = Calculate_Moments(x,y',Z);
+Z(Z==0) = NaN;
+VC_X = com(1);
+VC_Y = com(2);
+
+MV_Res.TopoParams.Centers.Topographic_XY = [TC_X,TC_Y];
+MV_Res.TopoParams.Centers.Geometric_XY = [GC_X,GC_Y];
+MV_Res.TopoParams.Centers.Volumetric_XY = [VC_X,VC_Y];
+
 %% Determine Summit Area
-disp('Determing summit area and contour parameters...')
+if pack.verbose > 0
+    disp('Determing summit area and contour parameters...')
+end
 
 if isempty(craterXYZ)
     useMaxZ = max(Z(:)); 
@@ -590,16 +833,19 @@ else
     end
 end
 
-[summitXYZ,summitCont] = MorVolc_GetSummitRegion(summitRegion,Z,S,X,Y,LowFlankZ,conts,useMaxZ,peakDiff);
+[summitXYZ,summitCont] = MorVolc_GetSummitRegion(summitRegion,Z,SG,X,Y,LowFlankZ,conts,useMaxZ,pack.peakDiff,pack.verbose);
 
 %% Mask grids and boundaries
-disp('Applying Mask...')
+if pack.verbose > 0
+    disp('Applying Mask...')
+end
+
 if ~isempty(maskXY)
     for j = 1:length(maskXY)
         p = inpolygon(X,Y,maskXY{j}(:,1),maskXY{j}(:,2));
         tmpZ = Z;
         Z(p) = NaN;
-        S(p) = NaN;
+        SG(p) = NaN;
         S_nocrater(p) = NaN;
     
         p = inpolygon(summitXYZ(:,1),summitXYZ(:,2),maskXY{j}(:,1),maskXY{j}(:,2)); 
@@ -686,236 +932,473 @@ if ~isempty(maskXY)
     end
 end
 
-morRes.GeneralParams.MaskXY = maskXY;
-morRes.GeneralParams.Lower_Flank_Contour = LowFlankZ;
-morRes.GeneralParams.Lower_Flank_XY = LowFlankXYZ;
+MV_Res.GeographicParams.maskXY = maskXY;
+MV_Res.GeographicParams.Lower_Flank_Contour = LowFlankZ;
+MV_Res.GeographicParams.Lower_Flank_XY = LowFlankXYZ;
 
-morRes.GeneralParams.Summit_Contour = summitCont;
-morRes.GeneralParams.SummitXYZ = summitXYZ;
-morRes.GeneralParams.BoundaryXYZ = boundaryXYZ;
-morRes.GeneralParams.CraterXYZ = craterXYZ;
+MV_Res.GeographicParams.Summit_Contour = summitCont;
+MV_Res.GeographicParams.SummitXYZ = summitXYZ;
+MV_Res.GeographicParams.boundaryXYZ = boundaryXYZ;
+MV_Res.GeographicParams.craterXYZ = craterXYZ;
 
 %% Calculate Contour Parameters
-disp('Calculating Contour Parameters')
+if pack.verbose > 0
+    disp('Calculating Contour Parameters')
+end
 
-contEllipseAz_ei_ii_meMedSl_minMaxSl_aE = zeros(length(conts),11)*NaN;
-contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,1) = conts;
+cont_Ellipses = cell(length(conts),1);
+ellCenters = zeros(length(conts),2)*NaN;
+contsForEI = cont_Ellipses;
 
-% contEllipseAz_ei_ii_meMedSl_minMaxSl_aE_nonCC = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE;
+cont_min_max_mean_median_Slope = zeros(length(conts),5)*NaN;
 
-contEls = cell(length(conts),1);
-for i = 2:length(conts)-1
-    ccXY = contourc(X(1,:),Y(:,1),Z,[conts(i),conts(i)]);
-    ccXY = Convert_Contours(ccXY,0);
+cont_min_roughnesses = zeros(length(conts),length(MV_Res.TopoParams.Roughness))*NaN;
+cont_max_roughnesses = zeros(length(conts),length(MV_Res.TopoParams.Roughness))*NaN;
+cont_mean_roughnesses = zeros(length(conts),length(MV_Res.TopoParams.Roughness))*NaN;
+cont_median_roughnesses = zeros(length(conts),length(MV_Res.TopoParams.Roughness))*NaN;
+cont_std_roughnesses = zeros(length(conts),length(MV_Res.TopoParams.Roughness))*NaN;
+
+cont_min_sv = zeros(length(conts),length(MV_Res.TopoParams.SlopeVariance.Windows))*NaN;
+cont_max_sv = zeros(length(conts),length(MV_Res.TopoParams.SlopeVariance.Windows))*NaN;
+cont_mean_sv = zeros(length(conts),length(MV_Res.TopoParams.SlopeVariance.Windows))*NaN;
+cont_median_sv = zeros(length(conts),length(MV_Res.TopoParams.SlopeVariance.Windows))*NaN;
+cont_std_sv = zeros(length(conts),length(MV_Res.TopoParams.SlopeVariance.Windows))*NaN;
+
+R_Grids = cell(length(MV_Res.TopoParams.Roughness),1);
+for i = 1:length(R_Grids)
+    [R,~,~] = GRIDobj2mat(MV_Res.TopoParams.Roughness(i).Roughness_Grid);
+    R(isnan(S_nocrater)) = NaN;
+    R_Grids{i} = R;
+end
+
+SV_Grids = cell(length(MV_Res.TopoParams.SlopeVariance.Windows),1);
+for i = 1:length(SV_Grids)
+    [SV,~,~] = GRIDobj2mat(MV_Res.TopoParams.SlopeVariance.Windows(i).SlopeVariance_Grid);
+    SV(isnan(S_nocrater)) = NaN;
+    SV_Grids{i} = SV;
+end
+
+if pack.verbose > 0
+    disp('   Determining ellipses, slopes, roughnesses, and slope variance...')
+end
+for i = 1:length(conts)
+    if pack.verbose > 1
+        disp(sprintf('      %d / %d',i,length(conts)));
+    end
+
+    % Seperate contour
+    ccXY = contourc(X(1,:),Y(:,1),Z,[1,1]*conts(i));
+    ccXY_All = Convert_Contours(ccXY,0);
+    ccXY_Sing = Convert_Contours(ccXY,1);
 
     if isempty(ccXY)
         continue;
     end
-    
-    % Isolate Contour to Use for Ellipse
-    useJ = 1;
-    for j = 2:length(ccXY)
-        if size(ccXY{j},1) > size(ccXY{useJ},1)
-            useJ = j;
-        end
-    end
-   
-    if conts(i) >= LowFlankZ
-        ce = FitEllipse_Unwrap(ccXY{useJ});
-        if ~isreal(ce.shortAxis)
-            contEls{i} = NaN;
-            contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,2) = NaN;
-            ce.shortAxis = NaN;
-            ce.longAxis = NaN;
-        else
-            contEls{i} = ce;
-            contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,2) = ce.phi;
-        end
-    else
-        % Script will be added to find the best-fit ellipse of non-closed
-        % contours.
-    end
-    
-    % Contour ellipticity & irregularity indexes.
-    if isempty(ccXY) || (ignoreSummitIndex==0 && conts(i) > min(summitXYZ(:,3))) || conts(i) < LowFlankZ
-        ei_MaxDiam = NaN;
-        ii_MaxDiam = NaN;
-        ee = NaN;
-        ei_BFEllipse = NaN;
-        ii_BFEllipse = NaN;
-    else
-        [ei_MaxDiam,ii_MaxDiam,~,~] = MorVolc_Ellipticity_Irregularity_MaxDiam(ccXY{useJ}(:,1),ccXY{useJ}(:,2));
-        [ei_BFEllipse,ii_BFEllipse,~,~] = MorVolc_Ellipticity_Irregularity_BFEllipse(ccXY{useJ}(:,1),ccXY{useJ}(:,2),ce);
-        ee = ce.shortAxis/ce.longAxis;
-    end
 
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,3) = ei_MaxDiam;
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,4) = ii_MaxDiam;
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,9) = ee;
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,10) = ei_BFEllipse;
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,11) = ii_BFEllipse;
-    
-    % Get slopes of contour
+    % Get and fill in slopes of the contour
     ss = S_nocrater;
     ss(Z>conts(i)) = NaN;
     ss(Z<=conts(i-1)) = NaN;
-    
-    % Fill mean and median slopes.
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,5) = nanmean(ss(:));
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,6) = nanmedian(ss(:));
-    
-    % Fill min and max Slopes
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,7) = nanmin(ss(:));
-    contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(i,8) = nanmax(ss(:));
-end    
+
+    cont_min_max_mean_median_Slope(i,1) = nanmin(ss(:));
+    cont_min_max_mean_median_Slope(i,2) = nanmax(ss(:));
+    cont_min_max_mean_median_Slope(i,3) = nanmean(ss(:));
+    cont_min_max_mean_median_Slope(i,4) = nanmedian(ss(:));
+    cont_min_max_mean_median_Slope(i,5) = nanstd(ss(:));
+
+    % Determine ellipse of closed contours
+    if conts(i) >= LowFlankZ
+        contsForEI{i} = ccXY_Sing;
+        ce = FitEllipse_Unwrap(ccXY_Sing,[]);
+        if ~isreal(ce.shortAxis)
+            ce.shortAxis = NaN;
+            ce.longAxis = NaN;
+            ce.phi = NaN;
+        else
+            ellCenters(i,:) = [ce.x0,ce.y0];
+        end
+        cont_Ellipses{i} = ce;
+    else
+        contsForEI{i} = ccXY_All;
+    end
+
+    if i == 1
+        continue;
+    end
+
+    % Loop through roughness, get and fill in contour values
+    for j = 1:length(R_Grids)
+        R = R_Grids{j};
+        R(Z>conts(i)) = NaN;
+        R(Z<=conts(i-1)) = NaN;
+        
+        cont_min_roughnesses(i,j) = nanmin(R(:));
+        cont_max_roughnesses(i,j) = nanmax(R(:));
+        cont_mean_roughnesses(i,j) = nanmean(R(:));
+        cont_median_roughnesses(i,j) = nanmedian(R(:));
+        cont_std_roughnesses(i,j) = nanstd(R(:));
+    end
+
+    % Loop through slope variance, get and fill in contour values
+    for j = 1:length(SV_Grids)
+        SV = SV_Grids{j};
+        SV(Z>conts(i)) = NaN;
+        SV(Z<=conts(i-1)) = NaN;
+        
+        cont_min_sv(i,j) = nanmin(SV(:));
+        cont_max_sv(i,j) = nanmax(SV(:));
+        cont_mean_sv(i,j) = nanmean(SV(:));
+        cont_median_sv(i,j) = nanmedian(SV(:));
+        cont_std_sv(i,j) = nanstd(SV(:));
+    end
+end
+
+% Try to fill in ellipses of non-closed contours
+if pack.verbose > 0
+    disp('   Correcting ellipses...')
+end
+meanXY = nanmean(ellCenters,1);
+for i = 1:length(conts)
+    if ~isempty(cont_Ellipses{i})
+        continue;
+    end
+
+    contPoints = [];
+    consecutivePointsHit = 0;
+    for j = 1:length(contsForEI{i})
+        if size(contsForEI{i}{j},1) >= minEllipsePoints
+            consecutivePointsHit = 1;
+        end
+        contPoints = [contPoints;contsForEI{i}{j}];
+    end
+
+    if ~consecutivePointsHit
+        continue;
+    end
+
+    ce = FitEllipse_Unwrap(contPoints,meanXY);
+    if ~isreal(ce.shortAxis)
+        ce.shortAxis = NaN;
+        ce.longAxis = NaN;
+        ce.phi = NaN;
+    end
+    cont_Ellipses{i} = ce;
+end
+
+% Calculate EI and II
+if pack.verbose > 0
+    disp('   Calculating ellipticity and irregularity indices...')
+end
+
+ei_ii_md = zeros(length(conts),2)*NaN;
+ei_ii_bfe = ei_ii_md;
+ee = zeros(length(conts),1)*NaN;
+azS = ee;
+for i = 1:length(conts)
+    if ~isempty(cont_Ellipses{i})
+        ee(i) = cont_Ellipses{i}.shortAxis/cont_Ellipses{i}.longAxis;
+        azS(i) = cont_Ellipses{i}.phi;
+    end
+
+    if isempty(contsForEI{i}) || (isempty(cont_Ellipses{i}) && conts(i)<LowFlankZ) || (pack.ignoreSummitIndex==0 && conts(i) > min(summitXYZ(:,3))) 
+        continue;
+    end
+
+    [ei_md,ii_md,~,~] = MorVolc_EI_II(contsForEI{i},cont_Ellipses{i},conts(i)>=LowFlankZ,0);
+    [ei_bfe,ii_bfe,~,~] = MorVolc_EI_II(contsForEI{i},cont_Ellipses{i},conts(i)>=LowFlankZ,1);
+
+    ei_ii_md(i,1) = ei_md;
+    ei_ii_md(i,2) = ii_md;
+    ei_ii_bfe(i,1) = ei_bfe;
+    ei_ii_bfe(i,2) = ii_bfe;
+end
 
 %% Collect Size Parameters
-disp('Collecting Size Parameters...')
+if pack.verbose > 0
+    disp('Collecting Size Parameters...')
+end
 % Basal Area & Width
 [basalArea,basalWidth] = MorVolc_Calculate_Area_Width(boundaryXYZ(:,1),boundaryXYZ(:,2));
 
-morRes.SizeParams.Basal_Area = basalArea;
-morRes.SizeParams.Basal_Width = basalWidth;
+MV_Res.SizeParams.Basal.Area = basalArea;
+MV_Res.SizeParams.Basal.Width = basalWidth;
 
 % Basal Axes
-be = FitEllipse_Unwrap(boundaryXYZ(:,1:2));
-morRes.SizeParams.Major_Basal_Axis = be.longAxis;
-morRes.SizeParams.Minor_Basal_Axis = be.shortAxis;
-morRes.SizeParams.Basal_Axis_Ellipticity = be.shortAxis/be.longAxis;
-morRes.SizeParams.Basal_Ellipse = be;
+be = FitEllipse_Unwrap(boundaryXYZ(:,1:2),[]);
+MV_Res.SizeParams.Basal.Major_Axis = be.longAxis;
+MV_Res.SizeParams.Basal.Minor_Axis = be.shortAxis;
+MV_Res.SizeParams.Basal.Axis_Ellipticity = be.shortAxis/be.longAxis;
+MV_Res.SizeParams.Basal.Ellipse = be;
 
 % Summit Area & Width
 [summitArea,summitWidth] = MorVolc_Calculate_Area_Width(summitXYZ(:,1),summitXYZ(:,2));
 
-morRes.SizeParams.Summit_Area = summitArea;
-morRes.SizeParams.Summit_Width = summitWidth;
+MV_Res.SizeParams.Summit.Area = summitArea;
+MV_Res.SizeParams.Summit.Width = summitWidth;
 
 % Summit Axes
 se = FitEllipse_Unwrap(summitXYZ(:,1:2));
-morRes.SizeParams.Summit_Basal_Axis = se.longAxis;
-morRes.SizeParams.Summit_Basal_Axis = se.shortAxis;
-morRes.SizeParams.Summit_Basal_Axis_Ellipticity = se.shortAxis/se.longAxis;
-morRes.SizeParams.Summit_Ellipse = se;
+MV_Res.SizeParams.Summit.Major_Axis = se.longAxis;
+MV_Res.SizeParams.Summit.Minor_Axis = se.shortAxis;
+MV_Res.SizeParams.Summit.Axis_Ellipticity = se.shortAxis/se.longAxis;
+MV_Res.SizeParams.Summit.Ellipse = se;
 
 % Heights and Volumes
-[surfXYs,surfZs,maxHeight,maxVol,volcHeights,volcVols,anyHeights] = MorVolc_CalculateHeightVols(X,Y,Z,boundaryXYZ,min(boundaryXYZ(:,3)),interpSurfaces);
+[~,~,surfDEMs,maxHeight,maxVol,volcHeights,volcVols,anyHeights] = MorVolc_CalculateHeightVols(X,Y,Z,boundaryXYZ,min(boundaryXYZ(:,3)),pack.interpSurfaces);
 
-morRes.SizeParams.Peak_Height = volcHeights;
-morRes.SizeParams.Maximum_Height = maxHeight;
-morRes.SizeParams.Any_Height = anyHeights;
-morRes.GeneralParams.Basal_Surface_XY = surfXYs;
-morRes.GeneralParams.Basal_Surface_Z = surfZs;
+MV_Res.SizeParams.Heights.Surface_to_Peak = volcHeights;
+MV_Res.SizeParams.Heights.Maximum_From_Boundary = maxHeight;
+MV_Res.SizeParams.Heights.Maximum_From_BasalSurface = anyHeights;
 
-morRes.SizeParams.Volume = volcVols;
-morRes.SizeParams.Maximum_Volume = maxVol;
+MV_Res.GeographicParams.Basal_Surfaces = surfDEMs;
+% MV_Res.GeographicParams.Basal_Surface_XY = surfXYs;
+% MV_Res.GeographicParams.Basal_Surface_Z = surfZs;
+
+MV_Res.SizeParams.Volumes.Total = volcVols;
+MV_Res.SizeParams.Volumes.Maximum = maxVol;
 
 % Eroded Volume
-[cont_area_convHullArea,volumeDiff,ConvZ] = CalculateErodedVolume(X,Y,Z,boundaryXYZ,trueCont,min(boundaryXYZ(:,3)),1,1);
-morRes.SizeParams.Minimum_Eroded_Volume = volumeDiff;
-morRes.SizeParams.Convex_Hull_Areas = cont_area_convHullArea;
-morRes.SizeParams.Convex_Hull_Interpolated_Surface = ConvZ;
+[cont_area_convHullArea,volumeDiff,ConvZ] = CalculateErodedVolume(X,Y,Z,boundaryXYZ,trueCont,min(boundaryXYZ(:,3)),1,pack.verbose);
+MV_Res.SizeParams.Volumes.Minimum_Eroded = volumeDiff;
+MV_Res.SizeParams.ReconstructedTopo.Convex_Hull_Areas = cont_area_convHullArea;
+MV_Res.SizeParams.ReconstructedTopo.Convex_Hull_Interpolated_Surface = ConvZ;
 
 %% Collect Orientation Parameters
-disp('Collecting Orientation Parameters...')
-morRes.OrientParams.Basal_Major_Axis_Azimuth = be.phi;
-morRes.OrientParams.Summit_Major_Axis_Azimuth = se.phi;
-morRes.OrientParams.Contour_Values = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,1);
-morRes.OrientParams.Contour_Major_Axis_Azimuths = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,2);
+if pack.verbose > 0
+    disp('Collecting Orientation Parameters...')
+end
+MV_Res.OrientParams.Basal_Major_Axis_Azimuth = be.phi;
+MV_Res.OrientParams.Summit_Major_Axis_Azimuth = se.phi;
+MV_Res.OrientParams.Contour_Elevation_Major_Axis_Azimuths = [conts,azS];
 
 %% Collect Shape Parameters
-disp('Collecting Shape Parameters...')
-morRes.ShapeParams.Contour_Values = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,1);
-morRes.ShapeParams.Contour_Axis_Ellipticity = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,9);
+if pack.verbose > 0
+    disp('Collecting Shape Parameters...')
+end
+MV_Res.ShapeParams.Contour.Elevations = conts;
+MV_Res.ShapeParams.Contour.Ellipses = cont_Ellipses;
+MV_Res.ShapeParams.Contour.Axis_Ellipticity = ee;
 
-morRes.ShapeParams.Contour_MaxDiam_Ellipticity_Indexes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,3);
-morRes.ShapeParams.Contour_MaxDiam_Irregularity_Indexes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,4);
-morRes.ShapeParams.Mean_MaxDiam_Ellipticity_Index = nanmean(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,3));
-morRes.ShapeParams.Mean_MaxDiam_Irregularity_Index = nanmean(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,4));
+ei_ii_md(ei_ii_md(:,1)>ellIndMax,1) = ellIndMax;
+ei_ii_md(ei_ii_md(:,2)>irrIndMax,2) = irrIndMax;
+ei_ii_md(ei_ii_md(:,2)<irrIndMin,2) = NaN;
 
+MV_Res.ShapeParams.Contour.Ellipticity_Indices.MaxDiameter = ei_ii_md(:,1);
+MV_Res.ShapeParams.Contour.Irregularity_Indices.MaxDiameter = ei_ii_md(:,2);
 
-morRes.ShapeParams.Contour_BFEllipse_Ellipticity_Indexes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,10);
-morRes.ShapeParams.Contour_BFEllipse_Irregularity_Indexes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,11);
-morRes.ShapeParams.Mean_BFEllipse_Ellipticity_Index = nanmean(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,10));
-morRes.ShapeParams.Mean_BFEllipse_Irregularity_Index = nanmean(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,11));
+MV_Res.ShapeParams.Mean_Shapes.Ellipticity_Index.MaxDiameter = nanmean(ei_ii_md(:,1));
+MV_Res.ShapeParams.Mean_Shapes.Irregularity_Index.MaxDiameter = nanmean(ei_ii_md(:,2));
 
-morRes.ShapeParams.Mean_Ellipse_Ellipticity = nanmean(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,9));
-morRes.ShapeParams.Height_BasalWidth.Natural = morRes.SizeParams.Peak_Height.Natural/morRes.SizeParams.Basal_Width;
-morRes.ShapeParams.Height_BasalWidth.IDW = morRes.SizeParams.Peak_Height.IDW/morRes.SizeParams.Basal_Width;
-morRes.ShapeParams.Height_BasalWidth.Kriging = morRes.SizeParams.Peak_Height.Kriging/morRes.SizeParams.Basal_Width;
-morRes.ShapeParams.SummitWidth_BasalWidth = morRes.SizeParams.Summit_Width/morRes.SizeParams.Basal_Width;
-morRes.ShapeParams.Contour_Ellipses = contEls;
+ei_ii_bfe(ei_ii_bfe(:,1)>ellIndMax,1) = ellIndMax;
+ei_ii_bfe(ei_ii_bfe(:,2)>irrIndMax,2) = irrIndMax;
+ei_ii_bfe(ei_ii_bfe(:,2)<irrIndMin,2) = NaN;
+
+MV_Res.ShapeParams.Contour.Ellipticity_Indices.BFEllipse = ei_ii_bfe(:,1);
+MV_Res.ShapeParams.Contour.Irregularity_Indices.BFEllipse = ei_ii_bfe(:,2);
+
+MV_Res.ShapeParams.Mean_Shapes.Ellipticity_Index.BFEllipse = nanmean(ei_ii_bfe(:,1));
+MV_Res.ShapeParams.Mean_Shapes.Irregularity_Index.BFEllipse = nanmean(ei_ii_bfe(:,2));
+
+MV_Res.ShapeParams.Mean_Shapes.Ellipse_Ellipticity = nanmean(ee);
+
+MV_Res.ShapeParams.Geometry.Height_BasalWidth.Natural = MV_Res.SizeParams.Heights.Surface_to_Peak.Natural/MV_Res.SizeParams.Basal.Width;
+MV_Res.ShapeParams.Geometry.Height_BasalWidth.IDW = MV_Res.SizeParams.Heights.Surface_to_Peak.IDW/MV_Res.SizeParams.Basal.Width;
+MV_Res.ShapeParams.Geometry.Height_BasalWidth.Kriging = MV_Res.SizeParams.Heights.Surface_to_Peak.Kriging/MV_Res.SizeParams.Basal.Width;
+MV_Res.ShapeParams.Geometry.SummitWidth_BasalWidth = MV_Res.SizeParams.Summit.Width/MV_Res.SizeParams.Basal.Width;
 
 Znan = isnan(Z);
 Z(isnan(Z)) = 0;
 [~,~,~,~,~,~,sk,ku] = Calculate_Moments(x,y',Z);
 Z(Znan) = NaN;
-morRes.ShapeParams.Skewness = sk;
-morRes.ShapeParams.Kurtosis = ku;
+MV_Res.ShapeParams.Geometry.Skewness = sk;
+MV_Res.ShapeParams.Geometry.Kurtosis = ku;
 
 %% Collect Slope Parameters
-disp('Collecting Slope Parameters...')
+if pack.verbose > 0
+    disp('Collecting Slope Parameters...')
+end
 tmpS = S_nocrater;
 tmpS(isnan(Z)) = NaN;
-allAvgSl = nanmean(tmpS(:));
-allMedSl = nanmedian(tmpS(:));
-allStdSl = nanstd(tmpS(:));
-morRes.SlopeParams.WholeEdifice_Mean_Slope = allAvgSl;
-morRes.SlopeParams.WholeEdifice_Median_Slope = allMedSl;
-morRes.SlopeParams.WholeEdifice_Std_Slope = allStdSl;
+MV_Res.SlopeParams.Full_Edifice.Mean = nanmean(tmpS(:));
+MV_Res.SlopeParams.Full_Edifice.Median = nanmedian(tmpS(:));
+MV_Res.SlopeParams.Full_Edifice.Std = nanstd(tmpS(:));
 
 pF = inpolygon(X,Y,LowFlankXYZ(:,1),LowFlankXYZ(:,2));
 pS = inpolygon(X,Y,summitXYZ(:,1),summitXYZ(:,2));
 
 tmpS = S_nocrater;
 tmpS(pF) = NaN;
-lFlankAvgSl = nanmean(tmpS(:));
-lFlankMedSl = nanmedian(tmpS(:));
-lFlankStdSl = nanstd(tmpS(:));
-morRes.SlopeParams.Lower_Flank_Mean_Slope = lFlankAvgSl;
-morRes.SlopeParams.Lower_Flank_Median_Slope = lFlankMedSl;
-morRes.SlopeParams.Lower_Flank_Std_Slope = lFlankStdSl;
-
-tmpS = S_nocrater;
-tmpS(~pS) = NaN;
-summitAvgSl = nanmean(tmpS(:));
-summitMedSl = nanmedian(tmpS(:));
-summitStdSl = nanstd(tmpS(:));
-morRes.SlopeParams.Summit_Mean_Slope = summitAvgSl;
-morRes.SlopeParams.Summit_Median_Slope = summitMedSl;
-morRes.SlopeParams.Summit_Std_Slope = summitStdSl;
+MV_Res.SlopeParams.Lower_Flank.Mean = nanmean(tmpS(:));
+MV_Res.SlopeParams.Lower_Flank.Median = nanmedian(tmpS(:));
+MV_Res.SlopeParams.Lower_Flank.Std = nanstd(tmpS(:));
 
 tmpS = S_nocrater;
 tmpS(~pF) = NaN;
 tmpS(pS) = NaN;
-flankAvgSl = nanmean(tmpS(:));
-flankMedSl = nanmedian(tmpS(:));
-flankStdSl = nanstd(tmpS(:));
-morRes.SlopeParams.Flank_Mean_Slope = flankAvgSl;
-morRes.SlopeParams.Flank_Median_Slope = flankMedSl;
-morRes.SlopeParams.Flank_Std_Slope = flankStdSl;
+MV_Res.SlopeParams.Main_Flank.Mean = nanmean(tmpS(:));
+MV_Res.SlopeParams.Main_Flank.Median = nanmedian(tmpS(:));
+MV_Res.SlopeParams.Main_Flank.Std = nanstd(tmpS(:));
 
-morRes.SlopeParams.Contour_Values = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,1);
-morRes.SlopeParams.Contour_Mean_Slopes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,5);
-morRes.SlopeParams.Contour_Median_Slopes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,6);
-morRes.SlopeParams.Contour_Min_Slopes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,7);
-morRes.SlopeParams.Contour_Max_Slopes = contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,8);
-morRes.SlopeParams.Contour_Max_Mean_Slope = max(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,5));
-morRes.SlopeParams.Contour_Max_Median_Slope = max(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,6));
+tmpS = S_nocrater;
+tmpS(~pS) = NaN;
+MV_Res.SlopeParams.Summit.Mean = nanmean(tmpS(:));
+MV_Res.SlopeParams.Summit.Median = nanmedian(tmpS(:));
+MV_Res.SlopeParams.Summit.Std = nanstd(tmpS(:));
 
-hf_i = find(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,5)==max(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,5)));
-hf_cont= contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(hf_i,1);
-totHeight = max(Z(:)) - max(boundaryXYZ(:,3));
-heightFrac = (hf_cont-max(boundaryXYZ(:,3)))/totHeight;
+MV_Res.SlopeParams.Contour.Elevations = conts;
+MV_Res.SlopeParams.Contour.Mean = cont_min_max_mean_median_Slope(:,3);
+MV_Res.SlopeParams.Contour.Median = cont_min_max_mean_median_Slope(:,4);
+MV_Res.SlopeParams.Contour.Min = cont_min_max_mean_median_Slope(:,1);
+MV_Res.SlopeParams.Contour.Max = cont_min_max_mean_median_Slope(:,2);
+MV_Res.SlopeParams.Contour.Std = cont_min_max_mean_median_Slope(:,5);
+MV_Res.SlopeParams.Contour.Maximum_Mean = max(cont_min_max_mean_median_Slope(:,3));
+MV_Res.SlopeParams.Contour.Maximum_Median = max(cont_min_max_mean_median_Slope(:,4));
 
-morRes.SlopeParams.Max_Slope_Height = hf_cont;
-morRes.SlopeParams.Max_Slope_Height_Fraction = heightFrac;
-morRes.SlopeParams.Max_Slope = max(contEllipseAz_ei_ii_meMedSl_minMaxSl_aE(:,5));
+hf_i = find(cont_min_max_mean_median_Slope(:,2)==max(cont_min_max_mean_median_Slope(:,2)));
+el_cont = conts(hf_i);
+hf_cont= el_cont-min(boundaryXYZ(:,3));
+totHeight = max(Z(:)) - min(boundaryXYZ(:,3));
+heightFrac = hf_cont/totHeight;
+
+MV_Res.SlopeParams.Maximum_Slope.Elevation = el_cont;
+MV_Res.SlopeParams.Maximum_Slope.Height = hf_cont;
+MV_Res.SlopeParams.Maximum_Slope.Height_Fraction = heightFrac;
+MV_Res.SlopeParams.Maximum_Slope.Slope = max(cont_min_max_mean_median_Slope(:,2));
+
+%% Collect Roughness Parameters
+if pack.verbose > 0
+    disp('Collecting Roughness Parameters...')
+end
+tmp = zeros(1,length(R_Grids))*NaN;
+MV_Res.RoughnessParams.Full_Edifice.Mean = tmp;
+MV_Res.RoughnessParams.Full_Edifice.Median = tmp;
+MV_Res.RoughnessParams.Full_Edifice.Std = tmp;
+
+MV_Res.RoughnessParams.Lower_Flank.Mean = tmp;
+MV_Res.RoughnessParams.Lower_Flank.Median = tmp;
+MV_Res.RoughnessParams.Lower_Flank.Std = tmp;
+
+MV_Res.RoughnessParams.Main_Flank.Mean = tmp;
+MV_Res.RoughnessParams.Main_Flank.Median = tmp;
+MV_Res.RoughnessParams.Main_Flank.Std = tmp;
+
+MV_Res.RoughnessParams.Summit.Mean = tmp;
+MV_Res.RoughnessParams.Summit.Median = tmp;
+MV_Res.RoughnessParams.Summit.Std = tmp;
+
+for i = 1:length(R_Grids)
+    tmpR = R_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(isnan(Z)) = NaN;
+    MV_Res.RoughnessParams.Full_Edifice.Mean(i) = nanmean(tmpR(:));
+    MV_Res.RoughnessParams.Full_Edifice.Median(i) = nanmedian(tmpR(:));
+    MV_Res.RoughnessParams.Full_Edifice.Std(i) = nanstd(tmpR(:));
+
+    tmpR = R_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(pF) = NaN;
+    MV_Res.RoughnessParams.Lower_Flank.Mean(i) = nanmean(tmpR(:));
+    MV_Res.RoughnessParams.Lower_Flank.Median(i) = nanmedian(tmpR(:));
+    MV_Res.RoughnessParams.Lower_Flank.Std(i) = nanstd(tmpR(:));
+
+    tmpR = R_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(~pS) = NaN;
+    MV_Res.RoughnessParams.Main_Flank.Mean(i) = nanmean(tmpR(:));
+    MV_Res.RoughnessParams.Main_Flank.Median(i) = nanmedian(tmpR(:));
+    MV_Res.RoughnessParams.Main_Flank.Std(i) = nanstd(tmpR(:));
+
+    tmpR = R_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(~pF) = NaN;
+    tmpR(pS) = NaN;
+    MV_Res.RoughnessParams.Summit.Mean(i) = nanmean(tmpR(:));
+    MV_Res.RoughnessParams.Summit.Median(i) = nanmedian(tmpR(:));
+    MV_Res.RoughnessParams.Summit.Std(i) = nanstd(tmpR(:));
+end
+
+MV_Res.RoughnessParams.Contour.Elevations = conts;
+MV_Res.RoughnessParams.Contour.Mean = cont_mean_roughnesses;
+MV_Res.RoughnessParams.Contour.Median = cont_median_roughnesses;
+MV_Res.RoughnessParams.Contour.Min = cont_min_roughnesses;
+MV_Res.RoughnessParams.Contour.Max = cont_max_roughnesses;
+MV_Res.RoughnessParams.Contour.Std = cont_std_roughnesses;
+MV_Res.RoughnessParams.Contour.Maximum_Mean = nanmax(cont_mean_roughnesses,[],1);
+MV_Res.RoughnessParams.Contour.Maximum_Median = nanmax(cont_median_roughnesses,[],1);
+
+%% Collect Slope Variance Parameters
+if pack.verbose > 0
+    disp('Collecting Windowed Slope Variance Parameters...')
+end
+% tmp = zeros(1,length(R_Grids))*NaN;
+tmp = zeros(1,length(SV_Grids))*NaN;
+MV_Res.WindowedSlopeVarianceParams.Full_Edifice.Mean = tmp;
+MV_Res.WindowedSlopeVarianceParams.Full_Edifice.Median = tmp;
+MV_Res.WindowedSlopeVarianceParams.Full_Edifice.Std = tmp;
+
+MV_Res.WindowedSlopeVarianceParams.Lower_Flank.Mean = tmp;
+MV_Res.WindowedSlopeVarianceParams.Lower_Flank.Median = tmp;
+MV_Res.WindowedSlopeVarianceParams.Lower_Flank.Std = tmp;
+
+MV_Res.WindowedSlopeVarianceParams.Main_Flank.Mean = tmp;
+MV_Res.WindowedSlopeVarianceParams.Main_Flank.Median = tmp;
+MV_Res.WindowedSlopeVarianceParams.Main_Flank.Std = tmp;
+
+MV_Res.WindowedSlopeVarianceParams.Summit.Mean = tmp;
+MV_Res.WindowedSlopeVarianceParams.Summit.Median = tmp;
+MV_Res.WindowedSlopeVarianceParams.Summit.Std = tmp;
+
+for i = 1:length(SV_Grids)
+    tmpR = SV_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(isnan(Z)) = NaN;
+    MV_Res.WindowedSlopeVarianceParams.Full_Edifice.Mean(i) = nanmean(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Full_Edifice.Median(i) = nanmedian(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Full_Edifice.Std(i) = nanstd(tmpR(:));
+
+    % tmpR = R_Grids{i};
+    tmpR = SV_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(pF) = NaN;
+    MV_Res.WindowedSlopeVarianceParams.Lower_Flank.Mean(i) = nanmean(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Lower_Flank.Median(i) = nanmedian(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Lower_Flank.Std(i) = nanstd(tmpR(:));
+
+    % tmpR = R_Grids{i};
+    tmpR = SV_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(~pS) = NaN;
+    MV_Res.WindowedSlopeVarianceParams.Main_Flank.Mean(i) = nanmean(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Main_Flank.Median(i) = nanmedian(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Main_Flank.Std(i) = nanstd(tmpR(:));
+
+    % tmpR = R_Grids{i};
+    tmpR = SV_Grids{i};
+    tmpR(isnan(S_nocrater)) = NaN;
+    tmpR(~pF) = NaN;
+    tmpR(pS) = NaN;
+    MV_Res.WindowedSlopeVarianceParams.Summit.Mean(i) = nanmean(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Summit.Median(i) = nanmedian(tmpR(:));
+    MV_Res.WindowedSlopeVarianceParams.Summit.Std(i) = nanstd(tmpR(:));
+end
+
+MV_Res.WindowedSlopeVarianceParams.Contour.Elevations = conts;
+MV_Res.WindowedSlopeVarianceParams.Contour.Mean = cont_mean_sv;
+MV_Res.WindowedSlopeVarianceParams.Contour.Median = cont_median_sv;
+MV_Res.WindowedSlopeVarianceParams.Contour.Min = cont_min_sv;
+MV_Res.WindowedSlopeVarianceParams.Contour.Max = cont_max_sv;
+MV_Res.WindowedSlopeVarianceParams.Contour.Std = cont_std_sv;
+MV_Res.WindowedSlopeVarianceParams.Contour.Maximum_Mean = nanmax(cont_mean_sv,[],1);
+MV_Res.WindowedSlopeVarianceParams.Contour.Maximum_Median = nanmax(cont_median_sv,[],1);
 
 %% Collect Crater Parameters
-disp('Collecting Crater Parameters...')
+if pack.verbose > 0
+    disp('Collecting Crater Parameters...')
+end
+
 if isempty(craterXYZ)
-    morRes.CraterParams = [];
-    morRes.GeneralParams.Crater_Interp = [];
+    MV_Res.CraterParams = [];
+    % MV_Res.GeneralParams.Crater_Interp = [];
 else
     craterArea = zeros(size(craterXYZ))*NaN;
     craterWidth = craterArea;
@@ -926,8 +1409,9 @@ else
     craterDepth = craterEllipse;
     craterMaxDepth = craterArea;
     craterVol = craterEllipse;
-    craterSurfXY = craterEllipse;
-    craterSurfZ = craterEllipse;
+    % craterSurfXY = craterEllipse;
+    % craterSurfZ = craterEllipse;
+    craterDEMs = craterEllipse;
     craterMaxVol = craterArea;
     craterElipt_MaxDiam = craterArea;
     craterIreg_MaxDiam = craterArea;
@@ -960,8 +1444,8 @@ else
         craterAxisEllipticity(i) = cEl.shortAxis/cEl.longAxis;
         
         % Irregularity & Ellipticity
-        [cEi_MaxDiam,cIi_MaxDiam,~,~] = MorVolc_Ellipticity_Irregularity_MaxDiam(cxyz(:,1),cxyz(:,2));
-        [cEi_BFEllipse,cIi_BFEllipse,~,~] = MorVolc_Ellipticity_Irregularity_BFEllipse(cxyz(:,1),cxyz(:,2),cEl);
+        [cEi_MaxDiam,cIi_MaxDiam,~,~] = MorVolc_EI_II(cxyz,cEl,1,0);
+        [cEi_BFEllipse,cIi_BFEllipse,~,~] = MorVolc_EI_II(cxyz,cEl,1,1);
         
         craterElipt_MaxDiam(i) = cEi_MaxDiam;
         craterIreg_MaxDiam(i) = cIi_MaxDiam;
@@ -973,17 +1457,18 @@ else
         p = inpolygon(X,Y,cxyz(:,1),cxyz(:,2));
         tmpZ(~p) = NaN;
         tmpCxyz = cxyz;
-        [cSurfXYs,cSurfZs,mH,mV,vHs,vVs] = MorVolc_CalculateHeightVols_Crater(X,Y,tmpZ,tmpCxyz,max(tmpCxyz(:,3)),interpSurfaces);
+        [cSurfXYs,cSurfZs,cDEMs,mH,mV,vHs,vVs] = MorVolc_CalculateHeightVols_Crater(X,Y,tmpZ,tmpCxyz,max(tmpCxyz(:,3)),pack.interpSurfaces);
 
         craterMaxDepth(i) = mH;
         craterMaxVol(i) = mV;
         craterDepth{i} = vHs;
         craterVol{i} = vVs;
-        craterSurfXY{i} = cSurfXYs;
-        craterSurfZ{i} = cSurfZs;
+        % craterSurfXY{i} = cSurfXYs;
+        % craterSurfZ{i} = cSurfZs;
+        craterDEMs{i} = cDEMs;
   
         % Slopes
-        tmpS = S;
+        tmpS = SG;
         tmpS(~p) = NaN;
         craterMeanSl(i) = nanmean(tmpS(:));
         craterMedianSl(i) = nanmedian(tmpS(:));
@@ -992,12 +1477,10 @@ else
         tmpZ(~p) = NaN;
         
         % Contour Stats
-        if craterContIter < 0 && craterContIter > -1
-%             trueCraterCont = round(abs(craterContIter)*range(tmpZ(:)),0);
-            trueCraterCont = round(abs(craterContIter)*range(tmpZ(:)));
+        if pack.craterContIter < 0 && pack.craterContIter > -1
+            trueCraterCont = round(abs(pack.craterContIter)*range(tmpZ(:)));
         else
-%             trueCraterCont = round(craterContIter,0);
-            trueCraterCont = round(craterContIter);
+            trueCraterCont = round(pack.craterContIter);
         end
         
         tmpConts = round(min(tmpZ(:))):round(min(tmpZ(:)))+trueCraterCont;
@@ -1006,11 +1489,12 @@ else
         craterConts = [tmpConts(tmpI)-trueCraterCont:trueCraterCont:max(tmpZ(:))]';
         
         
-        tmpStats.Crater_Contours = craterConts;
-        tmpCMeanSl = zeros(size(tmpStats.Crater_Contours));
-        tmpCMedianSl = zeros(size(tmpStats.Crater_Contours));
-        tmpCMinSl = zeros(size(tmpStats.Crater_Contours));
-        tmpCMaxSl = zeros(size(tmpStats.Crater_Contours));
+        tmpStats.Elevations = craterConts;
+        tmpCMeanSl = zeros(size(tmpStats.Elevations));
+        tmpCMedianSl = zeros(size(tmpStats.Elevations));
+        tmpCMinSl = zeros(size(tmpStats.Elevations));
+        tmpCMaxSl = zeros(size(tmpStats.Elevations));
+        tmpCStdSl = zeros(size(tmpStats.Elevations));
         
         for j = 2:length(craterConts)
             ccI = contourc(tmpZ,[craterConts(j),craterConts(j)]);
@@ -1024,12 +1508,16 @@ else
             tmpCMedianSl(j) = nanmedian(ss(:));
             tmpCMinSl(j) = nanmin(ss(:));
             tmpCMaxSl(j) = nanmax(ss(:));
+            tmpCStdSl(j) = nanstd(ss(:));
         end
         
-        tmpStats.Crater_Mean_Slope = tmpCMeanSl;
-        tmpStats.Crater_Median_Slope = tmpCMedianSl;
-        tmpStats.Crater_Min_Slope = tmpCMinSl;
-        tmpStats.Crater_Max_Slope = tmpCMaxSl;
+        tmpStats.Mean = tmpCMeanSl;
+        tmpStats.Median = tmpCMedianSl;
+        tmpStats.Min = tmpCMinSl;
+        tmpStats.Max = tmpCMaxSl;
+        tmpStats.Std = tmpCStdSl;
+        tmpStats.Maximum_Mean = nanmax(tmpCMeanSl);
+        tmpStats.Maximum_Median = nanmax(tmpCMedianSl);
         
         craterContStats{i} = tmpStats;
         
@@ -1043,40 +1531,44 @@ else
         craterDepth_BasalHeight{i}.Kriging = craterDepth{i}.Kriging/volcHeights.Kriging;
     end
     
-    morRes.CraterParams.Crater_Area = craterArea;
-    morRes.CraterParams.Crater_Width = craterWidth;
-    morRes.CraterParams.Crater_Major_Axis = craterMajor;
-    morRes.CraterParams.Crater_Minor_Axis = craterMinor;
-    morRes.CraterParams.Crater_Ellipse = craterEllipse;
-    morRes.CraterParams.Crater_Major_Axis_Azimuth = craterAz;
-    morRes.CraterParams.Crater_Depth = craterDepth;
-    morRes.CraterParams.Crater_Maximum_Depth = craterMaxDepth;
-    morRes.CraterParams.Crater_Volume = craterVol;
-    morRes.CraterParams.Crater_Maximum_Volume = craterMaxVol;
-    morRes.CraterParams.Crater_BFEllipse_Ellipticity_Index = craterElipt_BFEllipse;
-    morRes.CraterParams.Crater_BFEllipse_Irregularity_Index = craterIreg_BFEllipse;
-    morRes.CraterParams.Crater_MaxDiam_Ellipticity_Index = craterElipt_MaxDiam;
-    morRes.CraterParams.Crater_MaxDiam_Irregularity_Index = craterIreg_MaxDiam;
-    morRes.CraterParams.Crater_Mean_Slope = craterMeanSl;
-    morRes.CraterParams.Crater_Median_Slope = craterMedianSl;
-    morRes.CraterParams.Crater_Contour_Stats = craterContStats;
-    morRes.CraterParams.CraterDepth_CraterWidth = craterDepth_Width;
-    morRes.CraterParams.CraterWidth_BasalWidth = craterWidth_BasalWidth;
-    morRes.CraterParams.CraterDepth_BasalHeight = craterDepth_BasalHeight;
-    morRes.CraterParams.Crater_Axis_Ellipticity = craterAxisEllipticity;
-    morRes.CraterParams.Crater_Surface_XY = craterSurfXY;
-    morRes.CraterParams.Crater_Surface_Z = craterSurfZ;
+    MV_Res.CraterParams.Size.Area = craterArea;
+    MV_Res.CraterParams.Size.Width = craterWidth;
+    MV_Res.CraterParams.Size.Major_Axis = craterMajor;
+    MV_Res.CraterParams.Size.Minor_Axis = craterMinor;
+    MV_Res.CraterParams.Size.Axis_Ellipticity = craterAxisEllipticity;
+    MV_Res.CraterParams.Size.Ellipse = craterEllipse;
+    MV_Res.CraterParams.Size.Depth.Total = craterDepth;
+    MV_Res.CraterParams.Size.Depth.Maximum = craterMaxDepth;
+    MV_Res.CraterParams.Size.Volume.Total = craterVol;
+    MV_Res.CraterParams.Size.Volume.Maximum = craterMaxVol;
+
+    MV_Res.CraterParams.Orientation.Major_Axis_Azimuth = craterAz;
+
+    MV_Res.CraterParams.Shape.Ellipticity_Index.MaxDiameter = craterElipt_MaxDiam;
+    MV_Res.CraterParams.Shape.Irregularity_Index.MaxDiameter = craterIreg_MaxDiam;
+    MV_Res.CraterParams.Shape.Ellipticity_Index.BFEllipse = craterElipt_BFEllipse;
+    MV_Res.CraterParams.Shape.Irregularity_Index.BFEllipse = craterIreg_BFEllipse;
+
+    MV_Res.CraterParams.Shape.Geometry.CraterDepth_CraterWidth = craterDepth_Width;
+    MV_Res.CraterParams.Shape.Geometry.CraterWidth_BasalWidth = craterWidth_BasalWidth;
+    MV_Res.CraterParams.Shape.Geometry.CraterDepth_BasalHeight = craterDepth_BasalHeight;
+    
+    MV_Res.CraterParams.Slope.Mean = craterMeanSl;
+    MV_Res.CraterParams.Slope.Median = craterMedianSl;
+    MV_Res.CraterParams.Slope.Contour = craterContStats;
+    
+    MV_Res.CraterParams.Crater_Surfaces = craterDEMs;
 end
 
 %% Collect Peak Parameters
-disp('Collecting Peak Parameters...')
+if pack.verbose > 0
+    disp('Collecting Peak Parameters...')
+end
 
-if peakContIter < 0 && peakContIter > -1
-%     truePeakCont = round(abs(peakContIter)*maxHeight,0);
-    truePeakCont = abs(peakContIter)*maxHeight;
+if pack.peakContIter < 0 && pack.peakContIter > -1
+    truePeakCont = abs(pack.peakContIter)*maxHeight;
 else
-%     truePeakCont = round(peakContIter,0);
-    truePeakCont = peakContIter;
+    truePeakCont = pack.peakContIter;
 end
 
 allPeakIJ_cont = [];
@@ -1106,12 +1598,19 @@ end
 
 [sinp,son] = inpolygon(allPeakXYZ_cont(:,1),allPeakXYZ_cont(:,2),summitXYZ(:,1),summitXYZ(:,2));
 [lin,lon] = inpolygon(allPeakXYZ_cont(:,1),allPeakXYZ_cont(:,2),LowFlankXYZ(:,1),LowFlankXYZ(:,2));
-morRes.PeakParams.Summit_Contour_Peak_Count = sum((sinp+son)>0);
-morRes.PeakParams.Summit_Contour_Peak_XYZ = allPeakXYZ_cont((sinp+son)>0,:);
-morRes.PeakParams.Main_Flank_Contour_Peak_Count = sum((lin+lon)>0)-sum((sinp+son)>0);
-morRes.PeakParams.Main_Flank_Contour_Peak_XYZ = allPeakXYZ_cont(((sinp+son)==0).*((lin+lon)>0)>0,:);
-morRes.PeakParams.Lower_Flank_Contour_Peak_Count = size(allPeakXYZ_cont,1)-sum((lin+lon)>0);
-morRes.PeakParams.Lower_Flank_Contour_Peak_XYZ = allPeakXYZ_cont((lin+lon)==0,:);
+
+MV_Res.PeakParams.Full_Edifice = [];
+MV_Res.PeakParams.Lower_Flank.Contour.Count = size(allPeakXYZ_cont,1)-sum((lin+lon)>0);
+MV_Res.PeakParams.Lower_Flank.Contour.XYZ = allPeakXYZ_cont((lin+lon)==0,:);
+MV_Res.PeakParams.Main_Flank.Contour.Count = sum((lin+lon)>0)-sum((sinp+son)>0);
+MV_Res.PeakParams.Main_Flank.Contour.XYZ = allPeakXYZ_cont(((sinp+son)==0).*((lin+lon)>0)>0,:);
+MV_Res.PeakParams.Summit.Contour.Count = sum((sinp+son)>0);
+MV_Res.PeakParams.Summit.Contour.XYZ = allPeakXYZ_cont((sinp+son)>0,:);
+
+MV_Res.PeakParams.Full_Edifice.Contour.Count = MV_Res.PeakParams.Lower_Flank.Contour.Count +...
+    MV_Res.PeakParams.Main_Flank.Contour.Count + MV_Res.PeakParams.Summit.Contour.Count;
+MV_Res.PeakParams.Full_Edifice.Contour.XYZ = [MV_Res.PeakParams.Lower_Flank.Contour.XYZ;...
+    MV_Res.PeakParams.Main_Flank.Contour.XYZ;MV_Res.PeakParams.Summit.Contour.XYZ];
 
 % Local Maxima Peak Count
 locMax1 = islocalmax(Z,1);
@@ -1130,45 +1629,127 @@ lM3_mFlank((sinp+son)>0) = NaN;
 lM3_lFlank = locMax3;
 lM3_lFlank((lin+lon)>0) = NaN;
 
-morRes.PeakParams.Summit_Local_Peak_Count = nansum(lM3_summit(:));
+MV_Res.PeakParams.Summit.Local.Count = nansum(lM3_summit(:));
 [ii,jj] = find(lM3_summit>0);
-morRes.PeakParams.Summit_Local_Peak_XYZ = [];
+MV_Res.PeakParams.Summit.Local.XYZ = [];
 for i = 1:length(ii)
-    morRes.PeakParams.Summit_Local_Peak_XYZ = [morRes.PeakParams.Summit_Local_Peak_XYZ;...
+    MV_Res.PeakParams.Summit.Local.XYZ = [MV_Res.PeakParams.Summit.Local.XYZ;...
         X(ii(i),jj(i)),Y(ii(i),jj(i)),Z(ii(i),jj(i))];
 end
 
-morRes.PeakParams.Main_Flank_Local_Peak_Count = nansum(lM3_mFlank(:));
+MV_Res.PeakParams.Main_Flank.Local.Count = nansum(lM3_mFlank(:));
 [ii,jj] = find(lM3_mFlank>0);
-morRes.PeakParams.Main_Flank_Local_Peak_XYZ = [];
+MV_Res.PeakParams.Main_Flank.Local.XYZ = [];
 for i = 1:length(ii)
-    morRes.PeakParams.Main_Flank_Local_Peak_XYZ = [morRes.PeakParams.Main_Flank_Local_Peak_XYZ;...
+    MV_Res.PeakParams.Main_Flank.Local.XYZ = [MV_Res.PeakParams.Main_Flank.Local.XYZ;...
         X(ii(i),jj(i)),Y(ii(i),jj(i)),Z(ii(i),jj(i))];
 end
 
-morRes.PeakParams.Lower_Flank_Local_Peak_Count = nansum(lM3_lFlank(:));
+MV_Res.PeakParams.Lower_Flank.Local.Count = nansum(lM3_lFlank(:));
 [ii,jj] = find(lM3_lFlank>0);
-morRes.PeakParams.Lower_Flank_Local_Peak_XYZ = [];
+MV_Res.PeakParams.Lower_Flank.Local.XYZ = [];
 for i = 1:length(ii)
-    morRes.PeakParams.Lower_Flank_Local_Peak_XYZ = [morRes.PeakParams.Lower_Flank_Local_Peak_XYZ;...
+    MV_Res.PeakParams.Lower_Flank.Local.XYZ = [MV_Res.PeakParams.Lower_Flank.Local.XYZ;...
         X(ii(i),jj(i)),Y(ii(i),jj(i)),Z(ii(i),jj(i))];
 end
+
+MV_Res.PeakParams.Full_Edifice.Local.Count = MV_Res.PeakParams.Lower_Flank.Local.Count +...
+    MV_Res.PeakParams.Main_Flank.Local.Count + MV_Res.PeakParams.Summit.Local.Count;
+MV_Res.PeakParams.Full_Edifice.Local.XYZ = [MV_Res.PeakParams.Lower_Flank.Local.XYZ;...
+    MV_Res.PeakParams.Main_Flank.Local.XYZ;MV_Res.PeakParams.Summit.Local.XYZ];
 
 %% Save Results
-morRes.GeneralParams.EndTime = datetime('now');
-if ~isempty(saveResFolder)
-    disp('Saving Results...')
-    save([saveResFolder,figPrefix,'MorVolc_Results.mat'],'morRes')
+MV_Res.GeneralParams.EndTime = datetime('now');
+if ~isempty(pack.saveResFolder)
+    if pack.verbose > 0
+        disp('Saving Results...')
+    end
+    save([pack.saveResFolder,pack.figPrefix,'MorVolc_Results.mat'],'MV_Res')
 end
 
-if ~isempty(xlsFile)
-    MorVolc_SaveXLS(xlsFile,morRes);
+if ~isempty(pack.xlsFile) && pack.xlsFile && ~isempty(pack.saveResFolder)
+    MorVolc_SaveXLS([pack.saveResFolder,pack.figPrefix,'MorVolc_Results.xlsx'],MV_Res);
+end
+
+%% Save Inputs
+if pack.saveInputs && ~isempty(pack.saveResFolder)
+    if pack.verbose > 0
+        disp('Writing Input Text File...')
+    end
+
+    tmpTif = pack.tifFile;
+    tmpMask = pack.maskXY;
+    tmpCrat = pack.craterXY;
+    tmpXls = pack.xlsFile;
+
+    if ~ischar(tmpTif)
+        pack.tifFile = 'GRIDobj';
+    end
+
+    if isempty(tmpMask)
+        pack.maskXY = '[]';
+    elseif iscell(tmpMask)
+        pack.maskXY = 'Cell array';
+    elseif ~ischar(tmpMask)
+        pack.maskXY = 'Array';
+    end
+
+    if isempty(tmpCrat)
+        pack.craterXY = '[]';
+    elseif iscell(tmpCrat)
+        pack.craterXY = 'Cell array';
+    elseif ~ischar(tmpCrat)
+        pack.craterXY = 'Array';
+    end
+
+    if isempty(tmpXls)
+        pack.xlsFile = '[]';
+    end
+
+    Export_Inputs(pack,'MorVolc');
+
+    pack.tifFile = tmpTif;
+    pack.maskXY = tmpMask;
+    pack.craterXY = tmpCrat;
+    pack.xlsFile = tmpXls;
 end
 
 %% Plot Results
-if plotResults
-    disp('Plotting Results...')
-    MorVolc_Plots(morRes);
+if pack.plotResults
+    if pack.verbose > 0
+        disp('Plotting Results...')
+    end
+    MorVolc_Plots(MV_Res);
+end
+
+%% Zipping and Folder Deletion
+if pack.zipFiles > 0
+    if pack.verbose > 0   
+        disp('Zipping Results...')
+    end
+
+    origPath = pwd;
+    sameFol = (~isempty(pack.saveFigFolder) && ~isempty(pack.saveResFolder) && strcmp(pack.saveFigFolder,pack.saveResFolder));
+
+    if sameFol || (~isempty(pack.saveFigFolder) && (pack.zipFiles == 1 || pack.zipFiles == 3))
+        if pack.verbose > 0  && strcmp(pack.saveFigFolder,pack.saveResFolder)
+            disp('   Matlab and figure files are in the same folder and will be zipped together.')
+        elseif pack.verbose > 1
+            disp('   Zipping figure folder...')
+        end
+
+        Zip_Delete_Folder(pack.saveFigFolder,(pack.deleteAfterZip == 1 || pack.deleteAfterZip == 3))
+    end
+
+    if ~sameFol && (~isempty(pack.saveResFolder) && (pack.zipFiles == 2 || pack.zipFiles == 3))
+        if pack.verbose > 1
+            disp('   Zipping results folder...')
+        end
+
+        Zip_Delete_Folder(pack.saveResFolder,(pack.deleteAfterZip == 2 || pack.deleteAfterZip == 3))
+    end
+
+    cd(origPath)
 end
 
 end
