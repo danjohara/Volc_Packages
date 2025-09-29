@@ -177,7 +177,36 @@ for i = 1:length(dbi)
     
             % Calculate orientation by shifting outlet points relative to head
             % points and getting azimuth relative to the origin.
-            phi = Calculate_Azimuths(cHeadXY,cOutXY);
+            dXs = cOutXY(1)-cHeadXY(1);
+            dYs = cOutXY(2)-cHeadXY(2);
+            sl = dYs/dXs;
+    
+            if dXs > 0
+                if dYs > 0
+                    phi = 90-atand(abs(sl));
+                elseif dYs < 0
+                    phi = 90+atand(abs(sl));
+                else
+                    phi = 90;
+                end
+            elseif dXs < 0
+                if dYs > 0
+                    phi = 270 + atand(abs(sl));
+                elseif dYs < 0
+                    phi = 270 - atand(abs(sl));
+                else
+                    phi = 270;
+                end
+            else
+                if dYs > 0
+                    phi = 0;
+                elseif dYs < 0
+                    phi = 180;
+                else
+                    phi = NaN;
+                end
+            end
+    
             totBOrient = phi;
     
             % Rotate Data
@@ -210,7 +239,7 @@ for i = 1:length(dbi)
     
             % Run through channel points, get widths
             crossWidths = zeros(size(nChannelXYs(:,1)))*NaN;
-            crossDepths = crossWidths;
+            crossHeights = crossWidths;
             cross_midXY = zeros(size(nChannelXYs));
 
             if usePar
@@ -222,112 +251,27 @@ for i = 1:length(dbi)
 
             parfor (j = 1:length(crossWidths),nw)
                 xyDists = [[1:length(nBoundXYs(:,1))]',abs(nBoundXYs(:,1)-nChannelXYs(j,1)),nBoundXYs(:,2)-nChannelXYs(j,2)];
-                xyDUpper = xyDists(xyDists(:,3)>0,:);
+                xyDUpper = xyDists(xyDists(:,3)>=0,:);
                 xyDLower = xyDists(xyDists(:,3)<0,:);
-                xyDOn = xyDists(xyDists(:,3)==0,:);
                 
                 if isempty(xyDUpper) || isempty(xyDLower)
                     continue;
                 end
-
-                if sum(xyDLower(:,2)==0)>0 && sum(xyDUpper(:,2)==0)>0
-                    tmpDL = xyDLower; tmpDL(tmpDL(:,2)~=0,3)=NaN;
-                    tmpDU = xyDUpper; tmpDU(tmpDU(:,2)~=0,3)=NaN;
-
-                    upperI = find(abs(tmpDU(:,3)) == nanmax(abs(tmpDU(:,3))),1);
-                    lowerI = find(abs(tmpDL(:,3)) == nanmax(abs(tmpDL(:,3))),1);
-
-                    upperI = tmpDU(upperI,1);
-                    lowerI = tmpDL(lowerI,1);
-                elseif sum(xyDLower(:,2)==0)>0 && sum(sum(abs(xyDOn(:,2:3)),2)==0)>0
-                    tmpDL = xyDLower; tmpDL(tmpDL(:,2)~=0,3) = NaN;
-                    lowerI = find(abs(tmpDL(:,3)) == nanmax(abs(tmpDL(:,3))),1);
-                    lowerI = tmpDL(lowerI,1);
-
-                    upperI = find(sum(abs(xyDOn(:,2:3)),2)==0,1);
-                    upperI = xyDOn(upperI,1);
-                elseif sum(xyDUpper(:,2)==0)>0 && sum(sum(abs(xyDOn(:,2:3)),2)==0)>0
-                    tmpDU = xyDUpper; tmpDU(tmpDU(:,2)~=0,3) = NaN;
-                    upperI = find(abs(tmpDU(:,3)) == nanmax(abs(tmpDU(:,3))),1);
-                    upperI = tmpDU(upperI,1);
-
-                    lowerI = find(sum(abs(xyDOn(:,2:3)),2)==0,1);
-                    lowerI = xyDOn(lowerI,1);
-                elseif sum(xyDLower(:,2)==0)==0 && sum(sum(abs(xyDOn(:,2:3)),2)==0)>0
-                    tmpDL = xyDLower;
-                    tmpDL(abs(tmpDL(:,2))>min(abs(tmpDL(:,2))),:) = [];
-
-                    tmpDU = xyDUpper;
-                    tmpDU(abs(tmpDU(:,2))>min(abs(tmpDU(:,2))),:) = [];
-
-                    tmpHyps1 = sqrt(tmpDL(:,2).^2 + tmpDL(:,3).^2);
-                    tmpHyps2 = sqrt(tmpDU(:,2).^2 + tmpDU(:,3).^2);
-
-                    if sum(tmpHyps1<DB.cellsize*1.01) == 0 && sum(tmpHyps2<DB.cellsize*1.01) == 0
-                        onI = find(sum(abs(xyDOn(:,2:3)),2)==0,1);
-                        onI = xyDOn(onI,1);
-
-                        crossWidths(j) = 0;
-                        cross_midXY(j,:) = [nChannelXYs(j,1),nBoundXYs(xyDists(onI,1),2)];
-                        crossDepths(j) = 0;
-                        continue;
-                    end
-
-                    lowerI = find(abs(tmpDL(:,3))==nanmax(abs(tmpDL(:,3))),1);
-                    lowerI = tmpDL(lowerI,1);
-
-                    upperI = find(sum(abs(xyDOn(:,2:3)),2)==0,1);
-                    upperI = xyDOn(upperI,1);
-                elseif sum(xyDUpper(:,2)==0)==0 && sum(sum(abs(xyDOn(:,2:3)),2)==0)>0
-                    tmpDL = xyDLower;
-                    tmpDL(abs(tmpDL(:,2))>min(abs(tmpDL(:,2))),:) = [];
-
-                    tmpDU = xyDUpper;
-                    tmpDU(abs(tmpDU(:,2))>min(abs(tmpDU(:,2))),:) = [];
-
-                    tmpHyps1 = sqrt(tmpDL(:,2).^2 + tmpDL(:,3).^2);
-                    tmpHyps2 = sqrt(tmpDU(:,2).^2 + tmpDU(:,3).^2);
-
-                    if sum(tmpHyps1<DB.cellsize*1.01) == 0 && sum(tmpHyps2<DB.cellsize*1.01) == 0
-                        onI = find(sum(abs(xyDOn(:,2:3)),2)==0,1);
-                        onI = xyDOn(onI,1);
-
-                        crossWidths(j) = 0;
-                        cross_midXY(j,:) = [nChannelXYs(j,1),nBoundXYs(xyDists(onI,1),2)];
-                        crossDepths(j) = 0;
-                        continue;
-                    end
-
-                    upperI = find(abs(tmpDU(:,3)) == nanmax(abs(tmpDU(:,3))),1);
-                    upperI = tmpDU(upperI,1);
-
-                    lowerI = find(sum(abs(xyDOn(:,2:3)),2)==0,1);
-                    lowerI = xyDOn(lowerI,1);
-                else
-                    tmpDU = xyDUpper;
-                    tmpDL = xyDLower;
-
-                    tmpDU(abs(tmpDU(:,2))>min(abs(tmpDU(:,2))),:) = [];
-                    tmpDL(abs(tmpDL(:,2))>min(abs(tmpDL(:,2))),:) = [];
-
-                    upperI = find(abs(tmpDU(:,3)) == nanmax(abs(tmpDU(:,3))),1);
-                    lowerI = find(abs(tmpDL(:,3)) == nanmax(abs(tmpDL(:,3))),1);
-
-                    upperI = tmpDU(upperI,1);
-                    lowerI = tmpDL(lowerI,1);
-                end
-
-                crossWidths(j) = abs(xyDists(upperI,3)) + abs(xyDists(lowerI,3));
-                cross_midXY(j,:) = [nChannelXYs(j,1),mean([nBoundXYs(xyDists(upperI,1),2);nBoundXYs(xyDists(lowerI,1),2)],1)];
                 
-                rotBoundPoint1 = nBoundXYs(xyDists(upperI,1),:);
-                rotBoundPoint2 = nBoundXYs(xyDists(lowerI,1),:);
+                upperI = find(abs(xyDUpper(:,2)) == min(abs(xyDUpper(:,2))),1);
+                lowerI = find(abs(xyDLower(:,2)) == min(abs(xyDLower(:,2))),1);
+                
+                crossWidths(j) = abs(xyDUpper(upperI,3)) + abs(xyDLower(lowerI,3));
+                cross_midXY(j,:) = [nChannelXYs(j,1),mean([nBoundXYs(xyDUpper(upperI,1),2);nBoundXYs(xyDLower(lowerI,1),2)],1)];
+                
+                rotBoundPoint1 = nBoundXYs(xyDUpper(upperI,1),:);
+                rotBoundPoint2 = nBoundXYs(xyDLower(lowerI,1),:);
                 
                 ddx = rotBoundPoint1(1)-rotBoundPoint2(1);
                 ddy = rotBoundPoint1(2)-rotBoundPoint2(2);
                 slp = ddy/ddx;
                 hyp = sqrt(ddx^2+ddy^2);
-                newHyps = [0:DB.cellsize/2:hyp,hyp];
+                newHyps = linspace(0,hyp,30);
                 
                 if ddx ~=0
                     interpX = rotBoundPoint2(1)+sign(ddx)*newHyps*cos(atan(abs(slp)));
@@ -338,7 +282,7 @@ for i = 1:length(dbi)
                 end
                 
                 interpZ = gridInterp(interpX,interpY);
-                crossDepths(j) = range(interpZ);
+                crossHeights(j) = range(interpZ);
             end
     
             % Smooth Mid-Basin Data
@@ -378,7 +322,7 @@ for i = 1:length(dbi)
             channelY = NaN;
             channelZ = NaN;
             crossWidths = NaN;
-            crossDepths = NaN;
+            crossHeights = NaN;
         end
     else
         if verbose > 1
@@ -396,7 +340,7 @@ for i = 1:length(dbi)
         channelY = NaN;
         channelZ = NaN;
         crossWidths = NaN;
-        crossDepths = NaN;
+        crossHeights = NaN;
 
         totFLength = NaN;
         totHyps = NaN;
@@ -422,7 +366,7 @@ for i = 1:length(dbi)
     
     % Fill cross values
     cross_db_stats = [cross_db_stats;[ones(size(channelX))*i,...
-        channelX,channelY,channelZ,crossWidths,crossDepths,crossDepths./crossWidths]];
+        channelX,channelY,channelZ,crossWidths,crossHeights,crossHeights./crossWidths]];
 end
 % Put grids in structure
 tot_db_grids.BasinWidths = tmpWidths;

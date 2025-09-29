@@ -23,6 +23,10 @@ function Basin_Contour_ContourP_Count_Length_Area = DrainageVolc_Determine_Basin
 Basin_Contour_ContourP_Count_Length_Area = [];
 
 [Z,x,y] = GRIDobj2mat(DEMf);
+if size(x,1) == 1
+    x = x';
+end
+
 [DBg,~,~] = GRIDobj2mat(DB);
 
 DBg(isnan(Z)) = NaN;
@@ -75,7 +79,7 @@ for i = 0:basinContIter:max(tmpZ(:))
         for j = 1:length(bb)
             cx = x(bb{j}(:,2));
             cy = y(bb{j}(:,1));
-            cxy = [cx',cy];
+            cxy = [cx,cy];
 
             diffCC = [diff(cxy,1);cxy(end,:)-cxy(1,:)];
             contLength = contLength + sum(sqrt(sum(diffCC .* diffCC, 2)));

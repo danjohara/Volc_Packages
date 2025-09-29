@@ -19,7 +19,11 @@ function [basinAreaThreshold,tranStartA,MN] = DrainageVolc_SA_PiecewiseRegressio
 %   tranStartA: Area threhold for transition zone 
 %       initiation.
 
-posSTest = min(topNFlowAS(:,1))+areaStep:areaStep:max(topNFlowAS(:,1))-areaStep;
+if areaStep > 1
+    posSTest = min(topNFlowAS(:,1))+areaStep:areaStep:max(topNFlowAS(:,1))-areaStep;
+else
+    posSTest = 10.^(log10(min(topNFlowAS(:,1))) + areaStep:areaStep:log10(max(topNFlowAS(:,1)))-areaStep);
+end
 posS = zeros(size(posSTest));
 
 for i = 1:size(posSTest,1)
@@ -41,8 +45,12 @@ if isempty(ii)
 else
     tranStartA = posSTest(ii);
 end
-        
-areaRTests = tranStartA+areaStep:areaStep:max(topNFlowAS(:,1))-areaStep;
+   
+if areaStep > 1
+    areaRTests = tranStartA+areaStep:areaStep:max(topNFlowAS(:,1))-areaStep;
+else
+    areaRTests = 10.^(log10(tranStartA) + areaStep:areaStep:log10(max(topNFlowAS(:,1)))-areaStep);
+end
 areaRTests = [areaRTests',ones(length(areaRTests),3)];
 topNFlowAS(topNFlowAS(:,2)==0,:) = [];
 topNFlowAS(:,2) = tand(topNFlowAS(:,2));

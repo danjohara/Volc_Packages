@@ -1,7 +1,8 @@
-function mets = DrainageVolc_Analysis(pack)
+function DV_Res = DrainageVolc_Analysis(pack)
 %%
 % Name: DrainageVolc_Analysis
 % Initial Date: 02/04/2021 (mm/dd/yyyy)
+% Recent Update Date: 08/20/2025 (mm/dd/yyyy)
 % Author: Daniel O'Hara
 % Description: Script to analyze the basin morphometry metrics of a volcanic
 % edifice. Including typical topography-based metrics (slope, curvature,
@@ -13,42 +14,39 @@ function mets = DrainageVolc_Analysis(pack)
 %   ll2utm) and requires Matlab's Mapping, Parallel Computing, and Image 
 %   Processing Toolboxes.
 %
-% ALSO: This script is continuously being updated. Some functionality is 
-%   implemented in DrainageVolc that needs fixed (e.g, curvature analyses); 
-%   this is underway. Users are free to use and adapt this script as needed.
+% This script is compatible with both TopoToolbox 2 and TopoToolbox 3.
+%
+% ALSO: This script is continuously being updated. Some functionality may  
+%   change in future releases. Users are free to use and adapt this script 
+%   as needed.
 %
 % Input: 
 %   pack: Strucure of input parameters, includes:
-%       tifFile: .tif file to analyze. 
+%       tifFile: .tif file to analyze. This can also be given as a
+%           pre-compiled GRIDobj object.
 %       boundaryXY: 2xN matrix or shapefile name of edifice boundary 
 %           locations. If matrix, first column is X and second column is Y.
-%       maskMap: Array, or .shp file and path, of mask regions X- and 
-%           Y-coordinates to ignore in analysis.
-%       craterXY: 2xN matrix or shapefile name of crater boundary location
-%           that is ignored during DEM filling. If matrix, first column is
-%           X and second column is Y.
+%       maskXY: Array, cell array, or .shp file and path, of mask regions  
+%           X- and Y-coordinates to ignore in analysis.
+%       craterXY: 2xN matrix, cell array, or shapefile name of crater 
+%           boundary location that is ignored during DEM filling. If 
+%           matrix, first column is X and second column is Y.
 %
 %       dx: Grid resolution (in m) of the map.
-%       
+%
 %       hypsIter: Iteration value (0-1) to use for hypsometric/CDF 
 %           analysis.
-%       roughnessWindows: Window sizes (in m) to calculated roughness.
+%       roughnessWindows: Window sizes (in m) to calculated roughness. This
+%           can be any length, but only four will plot.
 %       roughnessType: String describing the type of roughness analysis,
 %           values given in TopoToolbox's 'roughness' script.
 %       slopeVarianceWindows: Window sizes (in m) to calculate slope
-%           variance.
-%       slopeVariance_ContIter: Contour iteration to collect slope variance
-%           values over elevation bins. If given as a negative value 
-%           between -1 and 0, value will be used as a percentage of the 
-%           total edifice height.
-%
-%       channelThreshold: Drainage area threshold (in m^2) of river 
-%           channels.
-%       dynamicThreshold: Flag to dynamically calculate the drainage area
-%           threshold for channel distinction.
-%       dynamicThresholdPixelStep: Pixel step count to calculate the
-%           drainage area threshold for channels.
-%
+%           variance. This can be any length, but only four will plot.
+%       
+%       contourSinuosity_ContIter: Iteration value for contour sinuosity
+%           analysis. If the value is > 0, it is treated as a topographic
+%           contour iteration. If it is a negative value between -1 and 0,
+%           it is used as a percentage of the total edifice height.
 %       basinContIter: Contour iteration to collect the number of basins
 %           per contour length. If given as a negative value between -1 and 
 %           0, value will be used as a percentage of the total edifice 
@@ -57,6 +55,7 @@ function mets = DrainageVolc_Analysis(pack)
 %           from edifice peak. If given as a negative value between -1 and 
 %           0, value will be used as a percentage of the maximum edifice 
 %           radius.
+%
 %       basinTopN: Number of largest basins to analyze for both the
 %           slope-area and channel concavity analyses. If basinTopN is a
 %           positive integer, the algorithm will analyze that number of
@@ -68,60 +67,110 @@ function mets = DrainageVolc_Analysis(pack)
 %       basinTopNFromContLength: Flag to determine if basinTopN elevation
 %           percentile should be based on number of basins per contour
 %           length value.
-%       Analyze_Divides: Flag for whether divides metrics should be
-%           determined.
+%
 %       limitHacksLaw: Flag for whether Hack's Law should only be limited
 %           to basins with a drainage area greater than the channelization
 %           threshold.
-%
+%       bsinStatThreshold: Drainage area threshold (in m^2) for whether
+%           basin statistics should be conducted.
 %       smoothBasinPointWavelength: Wavelength to smooth mid-basin points,
 %           to help correct noisy data that can skew basin length values.
-%       parallelProc: Flag for whether parallel processing should be used.
+%
+%       channelThreshold: Drainage area threshold (in m^2) of river 
+%           channels.
+%       dynamicThreshold: Flag to dynamically calculate the drainage area
+%           threshold for channel distinction.
+%       dynamicThresholdPixelStep: Pixel step count to calculate the
+%           drainage area threshold for channels.
+%
+%       conformityWavelength: Wavelength to filter topography for use in
+%           calculating channel conformity indices (Black et al., 2017). 
+%           Setting to NaN will make the wavelenth equivilent to the 
+%           edifice's effective radius. 
+%       conformityStreamDist: Channel distance over which orientatations
+%           and flow paths are calculated for the conformity index.
+%       knickpointTolerance: Elevation tolerance value to determine
+%           knickpoints using TopoToolbox's knickpointfinder. Lower values
+%           determine more knickpoints.
 %       MN: M/N value for \Chi analysis. Set as NaN for the script to
 %           determine best-fit value.
+%       chi_Zcutoff = Cutoff elevation for \Chi analysis. If it is set to 
+%           NaN, the elevation is set to the highest boundary point. If set
+%           to an imaginary number > 0 the elevation is set to that amount
+%           of relief above the lowest edifice elevation (e.g., 50i will
+%           set the elevation to 50 m above the lowest point). If set to an
+%           imaginary number between -1 and 0, the cutoff is determined as
+%           a percent of the total relief above the lowest point.
+%       chi_removeUpperBasins = Flag for whether basins that have outlets 
+%           above the elevation cutoff should be removed from the \Chi 
+%           analysis.
+%       concavityType: Type of regression analysis to calculate channel
+%           concavity and steepness index. 'ls' is nonlinear least squares
+%           from TopoToolbox; 'lad' is absolute deviation from TopoToolbox;
+%           'logtrls' is linear least squares from TopoToolbox; 'lin' is
+%           linear polygon fit of slope-area logarithmic values; and 'nlin'
+%           is nonlinear fit of slope-area values. 'lad' is default.
+%           'logtrls' and 'lin' are not recommended.
+%
+%       Analyze_Divides: Flag for whether divides metrics should be
+%           determined.
+%       Divide_Order_Cutoff: Threshold value for divide orders to 
+%           calculate the Divide Asymmetry Index (DAI).
+%       DAI_Integral_BinWidth: Bin width to derive the PDF of DAI values,
+%           from which the integral is taken to calculate \Gamma (O'Hara et 
+%           al., 2024) 
+%
+%       parallelProc: Flag for whether parallel processing should be used.
 %
 %       saveResFolder: Folder to save output structure. Set as empty if not
 %           saving results.
+%       saveInputs: Flag to save the inputs as a text file.
 %
 %       plotResults: Flag to plot analysis results.
+%       visPlots: Flag to determine whether plots are visible (good for
+%           running in background).
 %       figPrefix: Prefix to give before saved .fig and .png file names.
+%       figTitlePrefix: Prefix for figure titles (e.g, volcano name).
 %       saveFigFolder: Folder to save analysis plots (must include '/' or 
 %           '\' at the end, and plotResults must be set to 1 to use). Set 
-%           to empty if not saving plots.                                         
+%           to empty if not saving plots.    
+%
+%       verbose: Flag to indicate the amount of output displayed in the
+%           terminal. 0 gives no output; 1 gives broad output of each step;
+%           2 gives detailed information.
+%       zipFiles: Flag to determine whether the folders contain the results
+%           and or figures should be automatically zipped (helpful for
+%           running scripts on HPCs or for large amounts of data). 1 will 
+%           zip only the figures folder, 2 will zip only the results 
+%           folder, 3 will zip both. If the figure and result folders are 
+%           the same, everything is zipped into one folder.  
+%       deleteAfterZip: Flag to determine of folders should be
+%           automaticallly deleted after being zipped (helpful for running 
+%           scripts on HPC or for large amounts of data). 1 will delete the
+%           figures folder after zipping, 2 will delete the results folder
+%           after zipping, 3 will delete both after zipping.
 %
 % Output: 
 %   mets: Class variable that contains all analysis results, ordered by 
 %   category:
 %       GeneralParams:
-%           DEM0: Initial DEM (GRIDobj).
-%           X: Vector of DEM X coordinates.
-%           Y: Vector of DEM Y coordinates.
-%           Z: Grid of elevations.
-%           DEM: Analyzed DEM (GRIDobj).
-%           boundaryXY: Volcano boundary X- and Y-coordinates.
-%           craterXY: Crater region X- and Y-coordinates.
-%           inputs: Analysis input structure.
-%           cutZ: Elevation grid cut to the edifice.
-%           cutX: X-coordinate grid cut to the edifice.
-%           cutY: Y-coordinate grid cut to the edifice.
+%           inputs: Script input structure.
 %           Version: Analysis script version number.
 %           StartTime: DateTime object giving the time the script was
 %               started.
 %           EndTime: DateTime object giving the time the script ended.
+%
+%       GeographicParams:
+%           DEM0: Full GRIDobj of DEM (used by TopoToolbox).
+%           DEM: GRIDobj of DEM cut to the edifice.
+%
+%           boundaryXY: Volcano boundary X- and Y-coordinates.
+%           craterXY: Crater region X- and Y-coordinates.
+%           maskXY: Mask region x- and y-coordinates.
+%
 %       TopoParams:
-%           ZHyps_Areas: Normalized area values for Z CDF.
-%           ZHyps_Vals: Normalized Z CDF values.
-%           Slope: Local slopes of DEM (GRIDobj).
-%           Slope_Hyps_Areas: Normalized area values for slope CDF.
-%           Slope_Hyps_Vals: Slope CDF values.
-%           Curvature_Profile: Profile curvatures of DEM (GRIDobj).
-%           CProf_Hyps_Areas: Normalized area values for profile curvature 
-%               CDF.
-%           CProf_Hyps_Vals: Profile curvature CDF values.
-%           Curvature_Planform: Planform curvatures of DEM (GRIDobj).
-%           CPlan_Hyps_Areas: Normalized area values for planform curvature 
-%               CDF.
-%           CPlan_Hyps_Vals: Profile planform CDF values.
+%           Slope: Grid of DEM slope values.
+%
 %           Roughness: Indexed-structure of roughness analysis, includes:
 %               Roughness_Grid = Grid of roughness values.
 %               WindowSize = Pixel-size of roughness window.
@@ -131,6 +180,7 @@ function mets = DrainageVolc_Analysis(pack)
 %               Hypsometry_Areas = Normalized area values for roughness.
 %               Hypsometry_Values = Roughness CDF values.
 %               Hypsometry_NormValues = Nomalized roughness CDF values.
+%
 %           SlopeVariance_Windows: Indexed-structure of slope variance
 %               analysis, includes:
 %               SlopeVariance_Grid = Grid of roughness values.
@@ -141,91 +191,147 @@ function mets = DrainageVolc_Analysis(pack)
 %               Hypsometry_Areas = Normalized area values for roughness.
 %               Hypsometry_Values = Roughness CDF values.
 %               Hypsometry_NormValues = Nomalized roughness CDF values.
-%           SlopeVariance_Total: Total slope variance of the entire
-%               edifice.
-%           SlopeVariance_Elevation: Structure of slope variance of
-%               elevational bins along the edifice, includes:
-%               Values: Matrix of values, columns are elevation bin, 
-%                   normalized elevation bin, mean slope, std slope, and 
-%                   slope variance
-%               Titles: Cell array describing Values matrix.
-%           TopographicCenter_XY: X-Y location of highest topography.
-%           GeometricCenter_XY: X-Y location of center of boundary.
-%           VolumetricCenter_XY: X-Y location of center of volume.
+%
 %       DrainageParams:
-%           FD: Flow dirction object (FLOWobj).
-%           A: Cumulative drainage area (GRIDobj).
-%           D: Flow distance (GRIDobj).
-%           DB: Separated drainage basins (GRIDobj).
-%           DBxy: X-Y coordinates of the drainage basin boundaries, 
-%               separated by NaNs.
-%           DBxy_cell: X-Y coordinates of the drainage basin boundaries, 
-%               separated as a cell array.
-%           DB_Hyps_Topo: Normalized topography values for drainage basin 
-%               CDF.
-%           DB_Hyps_numDB: Drainage basin CDF values.
-%           DB_Hyps_numDB_Channelized: CDF values of drainage basins
-%               greater than the channelization threshold.
-%           HackLawFit_BasinLength: Best-fit parameters for Hack's Law 
-%               (relationship between drainage area and length) based on 
-%               basin length.
-%           HackLawFit_FlowLength: Best-fit parameters for Hack's Law 
-%               (relationship between drainage area and length) based on 
-%               basin flow length.
-%           HackLawDeviation_BasinLength: Basin deviations from 
-%               best-fitting Hack's Law parameters using basin length
-%               (GRIDobj).
-%           HackLawDeviation_FlowLength: Basin deviations from 
-%               best-fitting Hack's Law parameters using basin flow length 
-%               (GRIDobj).
-%           Basin_TopN: Value used to define the top basins.
-%           TopDBxy: X-Y coordinates of the largest drainage basin 
-%               boundaries, separated by NaNs.
-%           TopDBxy_cell: X-Y coordinates of the largest drainage basin 
-%               boundaries, separated as a cell array.
-%           TopN_basinIDs: Basin IDs of the top basins.
-%           TopN_All_Area_Slope: Drainage area and slope values of the
-%               largest N basins. Used for slope-area analysis.
-%           TopN_Flow_Area_Slope: Drainage area and slope values of only
-%               longest flow paths of the top N basins. Used for slope-area
-%               analysis.                   
-%           TopN_AreaThreshold_Rs: Array that contains the
-%               dynamically-calculated drainage area threshold for
-%               channels, the r^2 value of the hillslope regression, r^2
-%               value of channel regression, and r' value used to determine
-%               the threshold.
-%           TopN_TransitionThreshold_A: Area threhold for transition zone
-%               initiation.
-%           TopN_MN: M/N value derived from linear regression of slope-area 
-%               plots to determine best drainage area threshold for 
-%               channelization.
-%           Basin_Statistics: Matrix of basin IDs, drainage areas, max flow
-%               lengths, basin lengths, widths, reliefs, orientations,
-%               hypsometry integrals, mean slopes, sinuosity, Euclidean 
-%               distance between headwater and outlet, along-basin distance 
-%               from headwater to largest width, and slope variance.
-%           Basin_Statistics_Grids: Structure of grids for overall basin
-%               lengths, heights, widths, orientations, flow lengths,
-%               hypsometry integrals, mean slopes, sinuosities, drainage  
-%               area, and slope variance.
-%           Basin_Cross_Statistics: Array containing cross-basin stistics.
-%               Rows are ordered as: basin ids, drainage sampling 
-%               x-coordinates, drainage sampling y-coordinates, drainage
-%               sampling elevations, cross-basin widths (perpendicular to
-%               broad basin orientation) cross-basin relief (perpendicular
-%               to broad basin orientation), and incision ratio 
-%               (relief / width).
-%           Basin_Statistics_Titles: Cell array of metrics titles
-%               corresponding with Basin_Statistics columns.
-%           Basin_Contour_ContourP_Count_Length_Area: Array containing 
-%               analyzed contour values (in meters and percent relief from 
-%               main flank), the number of basins in each contour, the
-%               length of the contour, and the area of the contour.
-%           Basin_Contour_ContourP_Count_Length_Area_Channelized: same as
-%               Basin_Contour_ContourP_Count_Length_Area, but for basins
-%               with areas greater than the channelization threshold.
+%           Hydrology: Structure of hydrology-based TopoToolbox classes.
+%               FD: Flow dirction object (FLOWobj).
+%               A: Cumulative drainage area (GRIDobj).
+%               D: Flow distance (GRIDobj).
+%
+%           Drainage_Basins: Structure of drainage basin variables.
+%               DB: Separated drainage basins (GRIDobj).
+%               DBxy: X-Y coordinates of the drainage basin boundaries, 
+%                   separated by NaNs.
+%               DBxy_cell: X-Y coordinates of the drainage basin  
+%                   boundaries, separated as a cell array.
+%               Basin_Contour_ContourP_Count_Length_Area: Array containing 
+%                   analyzed contour values (in meters and percent relief  
+%                   from main flank), the number of basins in each contour, 
+%                   the length of the contour, and the area of the contour.
+%               Basin_Contour_ContourP_Count_Length_Area_Channelized: same 
+%                   as Basin_Contour_ContourP_Count_Length_Area, but for 
+%                   basins with areas greater than the channelization
+%                   threshold.
+% 
+%           Basin_Roughness_Stats: Structure of roughness statistics for
+%               each basin. Includes:
+%               BasinIDs: Array of basin IDs.
+%               Windows: Array of distances over which roughness was
+%                   calcualted (i.e., windows), corrected for cell size.
+%               Means: Array of roughness means, rows correspond to
+%                   basin IDs, columns to windows.
+%               Medians: Array of roughness medians, rows correspond to
+%                   basin IDs, columns to windows.
+%               Stds: Array of roughness standard deviations, rows 
+%                   correspond to basin IDs, columns to windows.
+%               Mins: Array of roughness minima, rows correspond to
+%                   basin IDs, columns to windows.
+%               Maxes: Array of roughness maxima, rows correspond to
+%                   basin IDs, columns to windows.
+%
+%           Basin_SlopeVariance_Stats: Structure of slope variance 
+%               statistics for each basin. Includes:
+%               BasinIDs: Array of basin IDs.
+%               Windows: Array of distances over which slope variance was
+%                   calcualted (i.e., windows), corrected for cell size.
+%               Means: Array of slope variance means, rows correspond to
+%                   basin IDs, columns to windows.
+%               Medians: Array of slope variance medians, rows correspond 
+%                   to basin IDs, columns to windows.
+%               Stds: Array of slope variance standard deviations, rows 
+%                   correspond to basin IDs, columns to windows.
+%               Mins: Array of slope variance minima, rows correspond to
+%                   basin IDs, columns to windows.
+%               Maxes: Array of slope variance maxima, rows correspond to
+%                   basin IDs, columns to windows.
+%
+%           Basin_Contour_Sinuosity: Structure of contour sinuosity
+%               statistics foreach basin. Includes:
+%               BasinIDs: Array of basin IDs.
+%               Contours: Array of elevations (in m) that define contours.
+%               Norm_Contours: Array of normalized elevations (0-1) that
+%                   define contours.
+%               Individual_Sinuosities: Individual sinuosity values for
+%                   each basin and contour. Rows correspond to basins,
+%                   columns to elevations.
+%               Means: Array of average sinuosity values for each basin.
+%               Medians: Array of median sinuosity values for each basin.
+%               Stds: Array of sinuosity value standard deviations for each
+%                   basin.
+%               Mins: Array of minimum sinuosity values for each basin.
+%               Maxes: Arry of maximum sinuosity values for each basin.
+%
+%           Top_Drainage_Basins: Structure of  highest-ranking basins
+%               Basin_TopN: Value used to define the top basins.
+%               TopN_basinIDs: Basin IDs of the top basins.
+%               TopDBxy: X-Y coordinates of the largest drainage basin 
+%                   boundaries, separated by NaNs.
+%               TopDBxy_cell: X-Y coordinates of the largest drainage basin 
+%                   boundaries, separated as a cell array.
+%               TopN_All_Area_Slope: Drainage area and slope values of the
+%                   largest N basins. Used for slope-area analysis.
+%               TopN_Flow_Area_Slope: Drainage area and slope values of 
+%                   only longest flow paths of the top N basins. Used for 
+%                   slope-area analysis.  
+%               TopN_AreaThreshold_Rs: Array that contains the
+%                   dynamically-calculated drainage area threshold for
+%                   channels, the r^2 value of the hillslope regression, 
+%                   r^2 value of channel regression, and r' value used to 
+%                   determine the threshold.
+%               TopN_TransitionThreshold_A: Area threhold for transition 
+%                   zone initiation.
+%               TopN_MN: M/N value derived from linear regression of 
+%                   slope-area  plots to determine best drainage area 
+%                   threshold for channelization.
+%
+%           Hacks_Law: Structure of Hack's Law analysis values
+%               HackLawFit_BasinLength: Best-fit parameters for Hack's Law 
+%                   (relationship between drainage area and length) based  
+%                   on basin length.
+%               HackLawFit_FlowLength: Best-fit parameters for Hack's Law 
+%                   based on basin flow length.
+%               HackLawDeviation_BasinLength: Array of basin deviations  
+%                   from best-fitting Hack's Law parameters using basin 
+%                   length. Columns are basin ID, basin area, basin length, 
+%                   basin length deviation from best-fit Hack parameters, 
+%                   and flag for whether the basin was used to derive the 
+%                   best-fit power law.
+%               HackLawDeviation_FlowLength: Array of basin deviations from 
+%                   best-fitting Hack's Law parameters using flow length.
+%                   Columns are basin ID, basin area, basin length, basin
+%                   length deviation from best-fit Hack parameters, and 
+%                   flag for whether the basin was used to derive the 
+%                   best-fit power law.
+%               HackLawDeviation_BasinLength_Map: GRIDobj of basin  
+%                   deviations from Hack's Law derived from basin lengths.
+%               HackLawDeviation_FlowLength_Map: GRIDobj of basin  
+%                   deviations from Hack's Law derived from flow lengths.
+%               HacksLawDeviation_Titles: Cell array of titles for Hack's
+%                   Law Deviation arrays.
+%
+%           Basin_Statistics: Structure of basin statistic variables.
+%               Basin_Statistics: Matrix of basin IDs, drainage areas, max 
+%                   flow lengths, basin lengths, widths, reliefs, 
+%                   orientations, hypsometry integrals, mean slopes, 
+%                   sinuosity, Euclidean distance between headwater and 
+%                   outlet, along-basin distance from headwater to largest 
+%                   width, and slope variance.
+%               Basin_Statistics_Grids: Structure of grids for overall 
+%                   basin lengths, heights, widths, orientations, flow 
+%                   lengths, hypsometry integrals, mean slopes, s
+%                   inuosities, drainage  area, and slope variance.
+%               Basin_Cross_Statistics: Array containing cross-basin 
+%                   stistics. Rows are ordered as: basin ids, drainage  
+%                   sampling x-coordinates, drainage sampling y-coordinates, 
+%                   drainage sampling elevations, cross-basin widths 
+%                   (perpendicular to broad basin orientation) cross-basin 
+%                   relief (perpendicular to broad basin orientation), and 
+%                   incision ratio  (relief / width).
+%               Basin_Statistics_Titles: Cell array of metrics titles
+%                   corresponding with Basin_Statistics columns.
+%
 %           Radial_Analysis: Structure of basins along radial distance from
-%               the edifice's peak, includes:
+%                   the edifice's peak.
 %               Basin_Count: Matrix of basin count results. Columns are bin 
 %                   distance, normalized bin distance, all basin count, and 
 %                   basin count of only those above areaThreshold.
@@ -238,423 +344,323 @@ function mets = DrainageVolc_Analysis(pack)
 %               Basin_IDs: Basin ID's at each interval.
 %               Basin_IDs_Channelized: Basin ID's above the channelization 
 %                   threshold at each interval.
+%
+%           Hypsometry: Structure of basin hypsometry calculations.
+%               DB_Hyps_Topo: Normalized topography values for drainage  
+%                   basin CDF.
+%               DB_Hyps_numDB: Drainage basin CDF values.
+%               DB_Hyps_numDB_Channelized: CDF values of drainage basins
+%                   greater than the channelization threshold.
+%
 %       ChannelParams:
-%           ChannelThreshold: Drainage area threshold used for channel
-%               distinction.
-%           S: Determined river channels (STREAMobj).
-%           DD: Channel drainage densities (needs to be paired with S).
-%           MaxDD: Maximum basin drainage density (GRIDobj).
-%           TotalDD: Cumulative drainage density of entire edifice.
-%           Concavity_Streams: Streams used to analyze channel concavity.
-%           Concavity_Stats: Stream concavity statistics, including
-%               contributing drainage area, gradient, ks, and best-fit
-%               concavity index (theta)
-%           Concavity_BasinIDs: Basin IDs used for analysis.
-%           Concavity_Mean: Mean concavity index of all analyzed streams.
-%           Concavity_DEM: DEM of channel concavities (GRIDobj)
-%           chiS: Determined river channels (STREAMobj) starting at the
-%               same elevation, as required for Chi analysis.
-%           chiS_topN: Determined river channels (STREAMobj) of the top N
-%               basins, starting at the same elevation, as required for 
-%               Chi analysis.
-%           BestFit_MN: Best-fitting M/N ratio for Chi analysis. Either
-%               provided by the user or derived from optimization.
-%           Chi: Channel Chi values using the best-fitting m/n ratio
-%               (needs to be paired with S).
-%           MaxChi: Maximum basin Chi value (GRIDobj).
-%           UpstreamChi: Chi values projected upstream to the divides.
-%               (GRIDobj)
+%           Channels: Structure of variables describing identified channels.
+%               ChannelThreshold: Drainage area threshold used for channel
+%                   distinction.
+%               S: Determined river channels (STREAMobj).
+%               Stream_Order: Array of Strahler stream orders for each 
+%                   segment of S (needs to be paired with S).
+%               Max_Stream_Order: GRIDobj of maximum stream orders in each
+%                   basin.
+%               Knickpoint_ID_BID_XY_StreamDist_DZ: Array of knickpoints
+%                   determined from TopoToolbox's knickpoint finder. 
+%                   Columns are unique knickpoint ID, associated basin ID, 
+%                   knickpoint XY coordinate, upstream distance to 
+%                   knickpoint, and the elevation difference at the 
+%                   knickpoint (i.e., the knickpoint's magnitude).
+%
+%           Drainage_Density: Structure of drainage density variables.
+%               DD: Channel drainage densities (needs to be paired with S).
+%               MaxDD: Maximum drainage density of each basin (GRIDobj).
+%               BasinDD: Total drainage density of each basin (GRIDobj).
+%               TotalDD: Cumulative drainage density of entire edifice.
+%
+%           Conformity: Structure of channel conformity. The conformity
+%                   index (Black et al., 2017) calcuates the azimuthal
+%                   difference between a channel segment and the flow path
+%                   derived from filtered topography, thus analyzing how 
+%                   well a channel conforms to longer wavelength 
+%                   topography. Afterwards, the cosine of the difference is 
+%                   calculated to put the value between -1 and 1. Here, 
+%                   only absolute values are considered. 
+%               Mean_Total_Conformity: Mean conformity value for every
+%                   channel segment of the edifice.
+%               Mean_Basin_Conformity: Array of mean conformity values for
+%                   each basin. First column is basin ID, second column is
+%                   mean conformity.
+%               Mean_Basin_Conformity_Map: GRIDobj of mean conformity
+%                   values for each basin.
+%               Mean_Basin_StrahlerOrder_Conformity: Structured array of
+%                   mean conformity values broken down by both basin and 
+%                   Strahler order. Fields include:
+%                   Basin_ID: Basin IDs;
+%                   Stream_Order: Array of stream orders in the basin.
+%                   Mean_Conformities: Array of mean conformity value for
+%                       each Strahler order.
+%               Segment_Information: Structured array that contains all the
+%                   information for how conformity was calculated for each 
+%                   segment. Includes:
+%                   Basin_ID: Basin ID.
+%                   X: Channel segment x-coordinates.
+%                   Y: Channel segment y-coordinates.
+%                   Z: Channel segment elevations.
+%                   Dist: Channel distances along the segment.
+%                   Order: Strahler order of the segment.
+%                   Orientation: Segment azimuthal orientation.
+%                   LongWavelength_EndPoints: End points of a flow path the
+%                       same length as the channel segment calculated over
+%                       the filtered topography.
+%                   LongWavelength_Orientation: Azimuthal orientation of
+%                       the fitered topography flowpath.
+%                   Orientation_Difference: Absolute difference between
+%                       channel segment and flow path orientations.
+%                   Conformity: Cosine of Orientation_Difference.
+%               Filtered_Topography: GRIDobj of the filtered topography.
+%
+%           Channel_Concavity: Structure of channel concavity variables.
+%               Concavity_Streams: Streams used to analyze channel 
+%                   concavity.
+%               Concavity_Stats: Stream concavity statistics, including
+%                   contributing drainage area, gradient, ks, and best-fit
+%                   concavity index (theta)
+%               Concavity_BasinIDs: Basin IDs used for analysis.
+%               Concavity_Mean: Mean concavity index of all analyzed 
+%                   streams.
+%               Concavity_DEM: DEM of channel concavities (GRIDobj).
+%
+%           Chi: Structure of channel chi values.
+%               Total_Chi: Structure of channel Chi values, calculated by
+%                       assuming all basins have the same M/N value (either  
+%                       given by the user, or determined by TopoToolbox). 
+%                   Chi_S: STREAMobj used to calculate Chi.
+%                   Chi_S_TopN: STREAMobj of only basins that meet the
+%                       basinTopN criteria. Used to calculate M/N if it is 
+%                       not supplied.
+%                   MN: M/N value either supplied by the user or determined
+%                       from Chi_S_TopN.
+%                   Chi: Array of Chi values, to be paired with Chi_S.
+%                   Maximum_Chi: GRIDobj of maximum Chi value for each 
+%                       basin.
+%                   Upstream_Chi: GRIDobj of Chi values projected upslope 
+%                       from the channel to divides. Used to compare Chi  
+%                       across divides and determine divide mobility. 
+%               Basin_Chi: Structure of channel Chi values, calculated by
+%                       assuming each basin has its own M/N value, as 
+%                       determined by TopoToolbox).
+%                   Chi_S: Structured array of individual basin STREAMobjs.
+%                           Contains:
+%                       BasinID: Basin ID.
+%                       S: Basin STREAMobj.
+%                   Chi: Structured array of individual basin Chi values. 
+%                           Contains: 
+%                       BasinID: Basin ID:
+%                       MN: Best-fitting M/N value.
+%                       Chi: Array of Chi values, to be paired with Chi_S.
+%                   Maximum_Chi: GRIDobj of maximum Chi value for each 
+%                       basin.
+%                   Upstream_Chi: GRIDobj of Chi values projected upslope 
+%                       from the channel to divides. Used to compare Chi  
+%                       across divides and determine divide mobility. 
+%               Chi_Cutoff_Elevation: Cutoff elevtion used to calculate Chi.
+%
 %       DivideParams:
 %           DivideTopo: Divide catalog ordered by topography.
-%               DVD: Divide structure (DIVIDEobj).
+%               DVD: Divide structure (DIVIDEobj), with ordering.
 %               X: Divide X location.
 %               Y: Divide Y location.
 %           Divide_ReliefDistance: List of distances to common streams across
-%               divides
+%               divides.
+%           VerticalDistance: Grid of vertical distances between divides
+%               and channels (GRIDobj).
 %           Divide_AsymmetryIndex: Asymmetry index from Scherler & 
 %               Schwanghart (2020)
-%           Divide_ChiDifference: Differences in Chi across divides.
+%           DAI_Gamma: Structure of values used to calculate Gamma. Gamma
+%               is the integral of the PDF of Divide Asymmetry Index
+%               values (O'Hara et al., 2024). Contains:
+%               Bins: DAI bins used for the PDF.
+%               Bin_Midpoints: Midpoint values of the bins.
+%               PDF: PDF values.
+%               Gamma: Integral of the PDF.
+%           DAI_Gamma_Corrected: Structure of values to calcualte Gamma
+%               with with DAI values of 1 removed to create more consistent
+%               values. Has the same structure as DAI_Gamma.
+%           Divide_TotalChiDifference: Differences in Chi across divides, 
+%               using the same M/N value for all basins.
+%           Divide_BasinChiDifference: Differences in Chi across divides, 
+%               using different, best-fit M/N values for each basin.
 %           Junction_X_Y_C_Z_D_A: Divide junction information, including
 %               X-coordinates, Y-coordinates, conjuction index, elevation,
 %               distance along divide, and asymmetry index.
-%           VerticalDistance: Grid of vertical distances between divides
-%               and channels (GRIDobj).
 
 %% Unpack input
 pack = DrainageVolc_DefaultVals(pack);
-disp(sprintf('USING DRAINAGEVOLC VERSION %s',pack.version))
-disp('Unpacking Input and Importing Data...')
-
-tifFile = pack.tifFile;
-boundaryXY = pack.boundaryXY;
-maskRegions = pack.maskMap;
-craterXY = pack.craterXY;
+if pack.verbose > 0
+    disp(sprintf('USING DRAINAGEVOLC VERSION %s',pack.version))
+    disp('Unpacking Input and Importing Data...')
+end
 
 dx = pack.dx;
-
-hypsIter = pack.hypsIter;
-roughnessWindows = pack.roughnessWindows;
-roughnessType = pack.roughnessType;
-slopeVarianceWindows = pack.slopeVarianceWindows;
-slopeVariance_ContIter = pack.slopeVariance_ContIter;
-
-basinContIter = pack.basinContIter;
-basinRadIter = pack.basinRadIter;
 basinTopN = pack.basinTopN;
-basinTopNFromContLength = pack.basinTopNFromContLength;
-limitHacksLaw = pack.limitHacksLaw;
-smoothBasinPointWavelength = pack.smoothBasinPointWavelength;
-parallelProc = pack.parallelProc;
-basinStatThreshold = pack.basinStatThreshold;
-
 channelThreshold = pack.channelThreshold;
-dynThreshold = pack.dynamicThreshold;
-dynThresholdStep = pack.dynamicThresholdPixelStep;
 MN = pack.MN;
 
-saveResFolder = pack.saveResFolder;
+DV_Res.GeneralParams.Version = pack.version;
+DV_Res.GeneralParams.StartTime = datetime('now');
 
-plotResults = pack.plotResults;
-figPrefix = pack.figPrefix;
-saveFigFolder = pack.saveFigFolder;
+DrainageVolc_CheckIters(pack.hypsIter,pack.basinContIter,pack.basinRadIter,basinTopN)
 
-mets.GeneralParams.Version = pack.version;
-mets.GeneralParams.StartTime = datetime('now');
+%% Import Shapefiles
+[boundaryXY,craterXY,maskXY] = Import_Shapefiles(pack.boundaryXY,pack.craterXY,pack.maskXY,pack.verbose);
 
-DrainageVolc_CheckIters(hypsIter,basinContIter,basinRadIter,basinTopN)
+DV_Res.GeneralParams.inputs = pack;
+DV_Res.GeographicParams.boundaryXY = boundaryXY;
+DV_Res.GeographicParams.craterXY = craterXY;
+DV_Res.GeographicParams.maskXY = maskXY;
 
-%% Setup
-% If boundary is given as shapefile, convert to an array.
-if ischar(boundaryXY)
-    Sh = shaperead(boundaryXY);
-    tx = Sh.X;
-    ty = Sh.Y;
-    if isnan(tx(end))
-        tx = tx(1:end-1);
-        ty = ty(1:end-1);
-    end
-    
-    if nansum((abs(tx)>180)*1) == 0 || nansum((abs(ty)>90)*1) == 0
-        try
-            [ttx,tty,~] = ll2utm(ty,tx);
-            boundaryXY = [ttx',tty'];
-        catch
-            warning('Unable to convert boundary from Lat/Lon, assuming already in UTM')
-            boundaryXY = [tx',ty'];
-        end
-    else
-        boundaryXY = [tx',ty'];
-    end
-end
+%% Load and Cut DEM
+[DEM0,~,~,~,DEM,X,Y,Z] = Import_DEM(pack.tifFile,dx,1,boundaryXY,craterXY,maskXY,pack.verbose);
+[~,~] = meshgrid(X,Y);
 
-% If crater is given as shapefile, convert to cell array.
-if ischar(craterXY)
-    Sh = shaperead(craterXY);
-    craterXY = [];
-    cellCraterXY = {};
-    for i = 1:size(Sh,1)
-        tx = Sh(i).X;
-        ty = Sh(i).Y;
-        if isnan(tx(end))
-            tx = tx(1:end-1);
-            ty = ty(1:end-1);
-        end
-
-        if nansum((abs(tx)>180)*1) == 0 || nansum((abs(ty)>90)*1) == 0
-            try
-                [ttx,tty,~] = ll2utm(ty,tx);
-                craterXY = [craterXY;ttx',tty'];
-                cellCraterXY = [cellCraterXY;{[ttx',tty']}];
-            catch
-                warning('Unable to convert crater from Lat/Lon, assuming already in UTM')
-                craterXY = [craterXY;tx',ty'];
-                cellCraterXY = [cellCraterXY;{[tx',ty']}];
-            end
-        else
-            cellCraterXY = [cellCraterXY;{[tx',ty']}];
-        end
-        craterXY = [craterXY;NaN,NaN];
-    end
-elseif ~isempty(craterXY)
-    cellCraterXY = {};
-    if iscell(craterXY)
-        tmp = [];
-        for i = 1:length(craterXY)
-            tmp = [tmp;craterXY{i}];
-            cellCraterXY = [cellCraterXY;{craterXY{i}}];
-        end
-        craterXY = tmp;
-    else
-        cellCraterXY = {craterXY};
-    end
-else
-    cellCraterXY = {};
-    craterXY = [];
-end
-
-% If mask is given as shapefile, convert to an array.
-maskXY = [];
-if ischar(maskRegions)
-    Sh = shaperead(maskRegions);
-    tx = Sh.X;
-    ty = Sh.Y;
-    if isnan(tx(end))
-        tx = tx(1:end-1);
-        ty = ty(1:end-1);
-    end
-    
-    if nansum((abs(tx)>180)*1) == 0 || nansum((abs(ty)>90)*1) == 0
-        try
-            [ttx,tty,~] = ll2utm(ty,tx);
-            maskXY = [ttx',tty'];
-        catch
-            warning('Unable to convert mask from Lat/Lon, assuming already in UTM')
-            maskXY = [tx',ty'];
-        end
-    else
-        maskXY = [tx',ty'];
-    end
-end
-
-%% Load DEM
-disp('Loading DEM...')
-if ischar(tifFile)
-    warning('off','all')
-    DEM = GRIDobj(tifFile);
-    warning('on','all')
-
-    if abs(DEM.refmat(3,1)) <= 180 || abs(DEM.refmat(3,2)) <= 90
-        try
-            DEM = reproject2utm(DEM,dx);
-        catch
-            warning('Cannot reproject DEM to UTM, assuming map is already in coordinates.')
-            DEM.Z(DEM.Z<-30000) = NaN;
-            DEM = resample(DEM,dx);
-        end
-    else
-        DEM.Z(DEM.Z<0) = NaN;
-        DEM = resample(DEM,dx);
-    end
-else
-    DEM = tifFile;
-end
-
-DEM0 = DEM;
-
-% Fill sinks, except for given region
-if isempty(craterXY)
-    DEMf = fillsinks(DEM);
-else
-    [~,tx,ty] = GRIDobj2mat(DEM);
-    [tX,tY] = meshgrid(tx,ty);
-    tS = DEM;
-    tS.Z = zeros(size(tS.Z));
-    for i = length(cellCraterXY)
-        p = inpolygon(tX,tY,cellCraterXY{i}(:,1),cellCraterXY{i}(:,2));
-        tS.Z(p==1) = 1;
-    end
-    DEMf = fillsinks(DEM,tS);
-end
-
-[~,X,Y] = GRIDobj2mat(DEMf);
-[XG,YG] = meshgrid(X,Y);
-pp = inpolygon(XG,YG,boundaryXY(:,1),boundaryXY(:,2));
-DEMf.Z(~pp) = NaN;
-
-% If masking, change grid.
-if ~isempty(maskXY)
-    pp = inpolygon(XG,YG,maskXY(:,1),maskXY(:,2));
-    DEMf.Z(pp) = NaN;
-    
-    pp = inpolygon(boundaryXY(:,1),boundaryXY(:,2),maskXY(:,1),maskXY(:,2));
-    boundaryXY(pp,:) = [];
-end
-
-[Z,~,~] = GRIDobj2mat(DEMf);
-
-mets.GeneralParams.DEM0 = DEM0;
-mets.GeneralParams.X = X;
-mets.GeneralParams.Y = Y;
-mets.GeneralParams.Z = Z;
-mets.GeneralParams.boundaryXY = boundaryXY;
-mets.GeneralParams.craterXY = craterXY;
-mets.GeneralParams.inputs = pack;
-
-%% Separate Volcano
-disp('Clipping Topography...')
-% Cut DEM
-DEMf = crop(DEMf);
-
-[~,X,Y] = GRIDobj2mat(DEMf);
-[XG,YG] = meshgrid(X,Y);
-pp = inpolygon(XG,YG,boundaryXY(:,1),boundaryXY(:,2));
-DEMf.Z(~pp) = NaN;
-[Z,xc,yc] = GRIDobj2mat(DEMf);
-[Xc,Yc] = meshgrid(xc,yc);
-mets.GeneralParams.cutZ = Z;
-mets.GeneralParams.cutX = X;
-mets.GeneralParams.cutY = Y;
-
-[ZHyps_Areas,ZHyps_Vals] = DrainageVolc_HypsometryValue(DEMf.Z,hypsIter,1);
-
-mets.GeneralParams.DEM = DEMf;
-
-mets.TopoParams.ZHyps_Areas = ZHyps_Areas;
-mets.TopoParams.ZHyps_Vals = ZHyps_Vals;
+DV_Res.GeographicParams.DEM0 = DEM0;
+DV_Res.GeographicParams.DEM = DEM;
 
 %% Basic Topography Metrics
-disp('Calculating Topography Metrics...')
-% Slope
-disp('   Slope...')
-slp = gradient8(DEMf,'degree');
-[Slope_Hyps_Areas,Slope_Hyps_Vals] = DrainageVolc_HypsometryValue(slp.Z,hypsIter,0);
+if pack.verbose > 0
+    disp('Calculating Topography Metrics...')
+    disp('   Slope...')
+end
 
-mets.TopoParams.Slope = slp;
-mets.TopoParams.Slope_Hyps_Areas = Slope_Hyps_Areas;
-mets.TopoParams.Slope_Hyps_Vals = Slope_Hyps_Vals;
+slp = gradient8(DEM,'degree');
+DV_Res.TopoParams.Slope = slp;
 
 % Slope Variance - Windows
-disp('   Windowed Slope Variance...')
+if pack.verbose > 0
+    disp('   Windowed Slope Variance...')
+end
 slopeVarianceVals = [];
-for i = 1:length(slopeVarianceWindows)
-    slVarI = round(slopeVarianceWindows(i)/dx,0);
+for i = 1:length(pack.slopeVarianceWindows)
+    if pack.verbose > 1
+        disp(sprintf('      Window %d / %d',i,length(pack.slopeVarianceWindows)))
+    end
+    slVarI = round(pack.slopeVarianceWindows(i)/dx,0);
     if mod(slVarI,2) == 0
         slVarI = slVarI+1;
     end
 
-    slVarGrid = DrainageVolc_CalculateSlopeVarianceWindow(slp,slVarI);
+    slVarGrid = CalculateSlopeVarianceWindow(slp,slVarI);
 
-    [slVarHypsAreas,slVarHypsVals] = DrainageVolc_HypsometryValue(slVarGrid.Z,hypsIter,0);
-    [~,slVarHypsNorm] = DrainageVolc_HypsometryValue(slVarGrid.Z,hypsIter,1);
+    [slVarHypsAreas,slVarHypsVals] = HypsometryValue(slVarGrid.Z,pack.hypsIter,0);
+    [~,slVarHypsNorm] = HypsometryValue(slVarGrid.Z,pack.hypsIter,1);
     
     slopeVarianceVals(i).SlopeVariance_Grid = slVarGrid;
     slopeVarianceVals(i).WindowSize = [slVarI,slVarI];
-    slopeVarianceVals(i).ExpectedWindowRes = slopeVarianceWindows(i);
+    slopeVarianceVals(i).ExpectedWindowRes = pack.slopeVarianceWindows(i);
     slopeVarianceVals(i).TrueWindowRes = slVarI*dx;
     slopeVarianceVals(i).Hypsometry_Areas = slVarHypsAreas;
     slopeVarianceVals(i).Hypsometry_Values = slVarHypsVals;
     slopeVarianceVals(i).Hypsometry_NormValues = slVarHypsNorm;
 end
 
-[slpG,~,~] = GRIDobj2mat(slp);
-mets.TopoParams.SlopeVariance_Windows = slopeVarianceVals;
-mets.TopoParams.SlopeVariance_Total = nanstd(slpG(:))./nanmean(slpG(:));
-
-% Slope Variance - Contours
-[slVarTable,slVarTitles] = DrainageVolc_CalculateSlopeVarianceElevation(DEMf,slp,slopeVariance_ContIter);
-mets.TopoParams.SlopeVariance_Elevation.Values = slVarTable;
-mets.TopoParams.SlopeVariance_Elevation.Titles = slVarTitles;
-
-% Curvature
-disp('   Curvature...')
-curve_prof = curvature(DEMf,'profc');
-curve_plan = curvature(DEMf,'planc');
-
-[CProf_Hyps_Areas,CProf_Hyps_Vals] = DrainageVolc_HypsometryValue(curve_prof.Z,hypsIter*.1,0);
-[CPlan_Hyps_Areas,CPlan_Hyps_Vals] = DrainageVolc_HypsometryValue(curve_plan.Z,hypsIter*.1,0);
-
-mets.TopoParams.Curvature_Profile = curve_prof;
-mets.TopoParams.CProf_Hyps_Areas = CProf_Hyps_Areas;
-mets.TopoParams.CProf_Hyps_Vals = CProf_Hyps_Vals;
-mets.TopoParams.Curvature_Planform = curve_plan;
-mets.TopoParams.CPlan_Hyps_Areas = CPlan_Hyps_Areas;
-mets.TopoParams.CPlan_Hyps_Vals = CPlan_Hyps_Vals;
+DV_Res.TopoParams.SlopeVariance_Windows = slopeVarianceVals;
 
 % Roughness
-disp('   Roughness...')
+if pack.verbose > 0
+    disp('   Roughness...')
+end
 roughnessVals = [];
-for i = 1:length(roughnessWindows)
-    roughI = round(roughnessWindows(i)/dx,0);
+for i = 1:length(pack.roughnessWindows)
+    if pack.verbose > 1
+        disp(sprintf('      Window %d / %d',i,length(pack.roughnessWindows)))
+    end
+    roughI = round(pack.roughnessWindows(i)/dx,0);
     if mod(roughI,2) == 0
         roughI = roughI+1;
     end
-    roughGrid = roughness(DEMf,roughnessType,[roughI,roughI]);
-    [roughHypsAreas,roughHypsVals] = DrainageVolc_HypsometryValue(roughGrid.Z,hypsIter,0);
-    [~,roughHypsNorm] = DrainageVolc_HypsometryValue(roughGrid.Z,hypsIter,1);
+    roughGrid = roughness(DEM,pack.roughnessType,[roughI,roughI]);
+    [roughHypsAreas,roughHypsVals] = HypsometryValue(roughGrid.Z,pack.hypsIter,0);
+    [~,roughHypsNorm] = HypsometryValue(roughGrid.Z,pack.hypsIter,1);
     
     roughnessVals(i).Roughness_Grid = roughGrid;
     roughnessVals(i).WindowSize = [roughI,roughI];
-    roughnessVals(i).ExpectedWindowRes = roughnessWindows(i);
+    roughnessVals(i).ExpectedWindowRes = pack.roughnessWindows(i);
     roughnessVals(i).TrueWindowRes = roughI*dx;
     roughnessVals(i).Hypsometry_Areas = roughHypsAreas;
     roughnessVals(i).Hypsometry_Values = roughHypsVals;
     roughnessVals(i).Hypsometry_NormValues = roughHypsNorm;
 end
 
-mets.TopoParams.Roughness = roughnessVals;
-
-% Topographic, Geometric, and Volumetric Centers
-
-%   Topographic Center (peak)
-disp('   Landform Centers...')
-[ii,jj] = find(Z==max(Z(:)),1);
-TC_X = XG(ii,jj);
-TC_Y = YG(ii,jj);
-
-%   Geometric Center (planform center of volcano)
-%       The moments script calculates the volume-based mathmatical moments
-%       of the elevation grid. Using 1 for all elevations within the
-%       volcano removes the topographic weighting of the moments. This is
-%       equivilant to taking the mean X and Y of all elevation coordinates.
-tt = (Z>0)*1;
-[~,~,~,~,~,com,~,~] = Calculate_Moments(X,Y',tt);
-GC_X = com(1);
-GC_Y = com(2);
-
-%   Volumetric Center (volumetric center of mass, see Lerner et al. 2020 for
-%       formal equation and description of use.
-Z(isnan(Z)) = 0;
-[~,~,~,~,~,com,~,~] = Calculate_Moments(X,Y',Z);
-Z(Z==0) = NaN;
-VC_X = com(1);
-VC_Y = com(2);
-
-mets.TopoParams.TopographicCenter_XY = [TC_X,TC_Y];
-mets.TopoParams.GeometricCenter_XY = [GC_X,GC_Y];
-mets.TopoParams.VolumetricCenter_XY = [VC_X,VC_Y];
+DV_Res.TopoParams.Roughness = roughnessVals;
 
 %% Drainage Metrics
-disp('Calculating Drainage Metrics...')
-FD = FLOWobj(DEMf,'preprocess','none');
+if pack.verbose > 0
+    disp('Calculating Drainage Metrics...')
+end
+FD = FLOWobj(DEM,'preprocess','none');
 
-mets.DrainageParams.FD = FD;
+DV_Res.DrainageParams.Hydrology.FD = FD;
 
 % Drainage Area
-disp('   Drainage Area...')
+if pack.verbose > 0
+    disp('   Drainage Area...')
+end
 A = flowacc(FD);
-A.Z(isnan(DEMf.Z)) = NaN;
+A.Z(isnan(DEM.Z)) = NaN;
 
 % Flow Distance
-disp('   Flow Distance...')
+if pack.verbose > 0
+    disp('   Flow Distance...')
+end
 D = flowdistance(FD);
-D.Z(isnan(DEMf.Z)) = NaN;
+D.Z(isnan(DEM.Z)) = NaN;
 
 % Drainage Basin
-disp('   Drainage Basins...')
+if pack.verbose > 0
+    disp('   Drainage Basins...')
+end
 DB = drainagebasins(FD);
 DB = shufflelabel(DB);
 DB.Z = single(DB.Z);
-DB.Z(isnan(DEMf.Z)) = NaN;
+DB.Z(isnan(DEM.Z)) = NaN;
 
 [DBxy,DBxy_cell] = DrainageVolc_GetBasinBoundaries(DB,A,dx,channelThreshold);
 
-mets.DrainageParams.A = A;
-mets.DrainageParams.D = D;
-mets.DrainageParams.DB = DB;
-mets.DrainageParams.DBxy = DBxy;
-mets.DrainageParams.DBxy_cell = DBxy_cell;
+DV_Res.DrainageParams.Hydrology.A = A;
+DV_Res.DrainageParams.Hydrology.D = D;
+
+DV_Res.DrainageParams.Drainage_Basins.DB = DB;
+DV_Res.DrainageParams.Drainage_Basins.DBxy = DBxy;
+DV_Res.DrainageParams.Drainage_Basins.DBxy_cell = DBxy_cell;
 
 % Drainage Basin Stats
-disp('   Drainage Basin Statistics...')
-[tot_db_stats,tot_db_grids,cross_db_stats] = DrainageVolc_Collect_DrainageBasin_Stats_wCross(Z,slp,A,DB,FD,D,parallelProc,smoothBasinPointWavelength,basinStatThreshold);
+if pack.verbose > 0
+    disp('   Drainage Basin Statistics...')
+end
+
+[tot_db_stats,tot_db_grids,cross_db_stats] = DrainageVolc_Collect_DrainageBasin_Stats_wCross(Z,slp,A,DB,FD,D,pack.parallelProc,pack.smoothBasinPointWavelength,pack.basinStatThreshold,pack.verbose);
 
 % Drainage Basins Per Contour
-Basin_Contour_ContourP_Count_Length_Area = DrainageVolc_Determine_Basin_Per_Contour(DEMf,DB,0,basinContIter,NaN);
-mets.DrainageParams.Basin_Contour_ContourP_Count_Length_Area = Basin_Contour_ContourP_Count_Length_Area;
+Basin_Contour_ContourP_Count_Length_Area = DrainageVolc_Determine_Basin_Per_Contour(DEM,DB,0,pack.basinContIter,NaN);
+DV_Res.DrainageParams.Drainage_Basins.Basin_Contour_ContourP_Count_Length_Area = Basin_Contour_ContourP_Count_Length_Area;
+
+% Roughness and Windowed Slope Variance
+if pack.verbose > 0
+    disp('   Drainage Basin Winowed Roughness and Slope Variance Statistics...')
+end
+[db_roughnessVals,db_svVals] = DrainageVolc_Collect_DB_Roughness_SlpVar(DB,roughnessVals,slopeVarianceVals,pack.verbose);
+DV_Res.DrainageParams.Basin_Roughness_Stats = db_roughnessVals;
+DV_Res.DrainageParams.Basin_SlopeVariance_Stats = db_svVals;
+
+% Contour Sinuosity
+if pack.verbose > 0
+    disp('   Drainage Basin Contour Sinuosity Values...')
+end
+ db_contSin = DrainageVolc_Collect_DB_ContourSinuosity(DEM,DB,pack.contourSinuosity_ContIter,pack.verbose);
+DV_Res.DrainageParams.Basin_Contour_Sinuosity_Stats = db_contSin;
 
 % Drainage Area - Slope Plots
-disp('   Slope-Area Relationship...')
-if basinTopNFromContLength
+if pack.verbose > 0
+    disp('   Slope-Area Relationship...')
+end
+if pack.basinTopNFromContLength
     tmp = Basin_Contour_ContourP_Count_Length_Area;
     tmp(tmp(:,2) >= .9,:) = [];
     contLength = tmp(:,3)./tmp(:,4);
@@ -663,33 +669,35 @@ if basinTopNFromContLength
     ii = find(diffcontLength<0,1,'last');
     basinTopN = (tmp(ii,2))-1;
 end
-[topNAS,topNFlowAS,topDBxy,DBxy_cell,topN_basinIDs] = DrainageVolc_Collect_SlopeAreas(tot_db_stats,DB,D,FD,slp,A,dx,basinTopN,DEMf);
-mets.DrainageParams.TopDBxy = topDBxy;
-mets.DrainageParams.TopDBxy_cell = DBxy_cell;
-mets.DrainageParams.TopN_All_Area_Slope = topNAS;
-mets.DrainageParams.TopN_Flow_Area_Slope = topNFlowAS;
-mets.DrainageParams.Basin_TopN = basinTopN;
-mets.DrainageParams.TopN_basinIDs = sortrows(topN_basinIDs);
+[topNAS,topNFlowAS,topDBxy,DBxy_cell,topN_basinIDs] = DrainageVolc_Collect_SlopeAreas(tot_db_stats,DB,D,FD,slp,A,dx,basinTopN,DEM);
+DV_Res.DrainageParams.Top_Drainage_Basins.TopDBxy = topDBxy;
+DV_Res.DrainageParams.Top_Drainage_Basins.TopDBxy_cell = DBxy_cell;
+DV_Res.DrainageParams.Top_Drainage_Basins.TopN_All_Area_Slope = topNAS;
+DV_Res.DrainageParams.Top_Drainage_Basins.TopN_Flow_Area_Slope = topNFlowAS;
+DV_Res.DrainageParams.Top_Drainage_Basins.Basin_TopN = basinTopN;
+DV_Res.DrainageParams.Top_Drainage_Basins.TopN_basinIDs = sortrows(topN_basinIDs);
 
 % Find Dynamic Threshold
-if dynThreshold
-    [basinAreaThreshold,transitionThreshold,MN] = DrainageVolc_SA_PiecewiseRegression(topNFlowAS,dynThresholdStep*dx^2);
+if pack.dynamicThreshold
+    [basinAreaThreshold,transitionThreshold,MN] = DrainageVolc_SA_PiecewiseRegression(topNFlowAS,pack.dynamicThresholdPixelStep*dx^2);
     channelThreshold = basinAreaThreshold(1);
     
-    mets.DrainageParams.TopN_AreaThreshold_Rs = basinAreaThreshold;
-    mets.DrainageParams.TopN_TransitionThreshold_A = transitionThreshold;
-    mets.DrainageParams.TopN_MN = abs(MN);
+    DV_Res.DrainageParams.Top_Drainage_Basins.TopN_AreaThreshold_Rs = basinAreaThreshold;
+    DV_Res.DrainageParams.Top_Drainage_Basins.TopN_TransitionThreshold_A = transitionThreshold;
+    DV_Res.DrainageParams.Top_Drainage_Basins.TopN_MN = abs(MN);
 else
-    mets.DrainageParams.TopN_AreaThreshold_Rs = [];
-    mets.DrainageParams.TopN_TransitionThreshold_A = [];
-    mets.DrainageParams.TopN_MN = [];
+    DV_Res.DrainageParams.Top_Drainage_Basins.TopN_AreaThreshold_Rs = [];
+    DV_Res.DrainageParams.Top_Drainage_Basins.TopN_TransitionThreshold_A = [];
+    DV_Res.DrainageParams.Top_Drainage_Basins.TopN_MN = [];
 end
-mets.ChannelParams.ChannelThreshold = channelThreshold;
+DV_Res.ChannelParams.Channels.ChannelThreshold = channelThreshold;
 
 % Hack's Relationship (L = c*A^b) Using Basin Length
-disp('   Hack''s Law Parameterization...')
+if pack.verbose > 0
+    disp('   Hack''s Law Parameterization...')
+end
 
-if limitHacksLaw
+if pack.limitHacksLaw
     [tmpPF,PF,lDev_Map,LDev_Titles] = DrainageVolc_HacksLaw(DB,tot_db_stats(:,1),...
         tot_db_stats(:,2),tot_db_stats(:,4),channelThreshold);
 else
@@ -697,96 +705,140 @@ else
         tot_db_stats(:,2),tot_db_stats(:,4),NaN);
 end
 
-mets.DrainageParams.HackLawFit_BasinLength = PF;
-mets.DrainageParams.HackLawDeviation_BasinLength = tmpPF;
-mets.DrainageParams.HackLawDeviation_BasinLength_Map = lDev_Map;
-mets.DrainageParams.HackLawDeviation_Titles = LDev_Titles;
+DV_Res.DrainageParams.Hacks_Law.HackLawFit_BasinLength = PF;
+DV_Res.DrainageParams.Hacks_Law.HackLawDeviation_BasinLength = tmpPF;
+DV_Res.DrainageParams.Hacks_Law.HackLawDeviation_BasinLength_Map = lDev_Map;
+DV_Res.DrainageParams.Hacks_Law.HackLawDeviation_Titles = LDev_Titles;
 
 % Hack's Relationship (L = c*A^b) Using Flow Length
-if limitHacksLaw
+if pack.limitHacksLaw
     [tmpPF,PF,lDev_Map,LDev_Titles] = DrainageVolc_HacksLaw(DB,tot_db_stats(:,1),...
         tot_db_stats(:,2),tot_db_stats(:,3),channelThreshold);
 else
     [tmpPF,PF,lDev_Map,LDev_Titles] = DrainageVolc_HacksLaw(DB,tot_db_stats(:,1),...
         tot_db_stats(:,2),tot_db_stats(:,3),NaN);
 end
-mets.DrainageParams.HackLawFit_FlowLength = PF;
-mets.DrainageParams.HackLawDeviation_FlowLength = tmpPF;
-mets.DrainageParams.HackLawDeviation_FlowLength_Map = lDev_Map;
-mets.DrainageParams.HackLawDeviation_Titles = LDev_Titles;
+DV_Res.DrainageParams.Hacks_Law.HackLawFit_FlowLength = PF;
+DV_Res.DrainageParams.Hacks_Law.HackLawDeviation_FlowLength = tmpPF;
+DV_Res.DrainageParams.Hacks_Law.HackLawDeviation_FlowLength_Map = lDev_Map;
+DV_Res.DrainageParams.Hacks_Law.HackLawDeviation_Titles = LDev_Titles;
 
-mets.DrainageParams.Basin_Statistics = tot_db_stats;
-mets.DrainageParams.Basin_Statistics_Grids = tot_db_grids;
-mets.DrainageParams.Basin_Cross_Statistics = cross_db_stats;
-mets.DrainageParams.Basin_Statistics_Titles = {'ID','Drainage Area','Flowpath Length','Basin Length','Basin Width','Basin Height','Basin Orientation','Basin Hypsometry Integral','Mean Basin Slope','Flowpath Sinuosity','Basin Euclidean Distance','Basin Length Distance to Largest Width'};
+DV_Res.DrainageParams.Basin_Statistics.Basin_Statistics = tot_db_stats;
+DV_Res.DrainageParams.Basin_Statistics.Basin_Statistics_Grids = tot_db_grids;
+DV_Res.DrainageParams.Basin_Statistics.Basin_Cross_Statistics = cross_db_stats;
+DV_Res.DrainageParams.Basin_Statistics.Basin_Statistics_Titles = {'ID','Drainage Area','Flowpath Length',...
+    'Basin Length','Basin Width','Basin Height','Basin Orientation',...
+    'Basin Hypsometry Integral','Mean Basin Slope','Flowpath Sinuosity','Basin Euclidean Distance',...
+    'Basin Length Distance to Largest Width','Slope Variance'};
 
 % Drainage Basins Per Radial Distance
-disp('   Drainage Basin by Radial Distance...')
-[BCount_Table,BCount_Titles,BIDs,BIDs_AboveA,R_DEM,RNorm_DEM] = DrainageVolc_CalculateRadialDistanceNumbers(DEMf,DB,tot_db_grids.DrainageArea,basinRadIter,channelThreshold);
-mets.DrainageParams.Radial_Analysis.Basin_Count = BCount_Table;
-mets.DrainageParams.Radial_Analysis.Basin_Count_Titles = BCount_Titles;
-mets.DrainageParams.Radial_Analysis.Radial_Distances = R_DEM;
-mets.DrainageParams.Radial_Analysis.Normalized_Radial_Distances = RNorm_DEM;
-mets.DrainageParams.Radial_Analysis.Basin_IDs = BIDs;
-mets.DrainageParams.Radial_Analysis.Basin_IDs_Channelized = BIDs_AboveA;
+if pack.verbose > 0
+    disp('   Drainage Basin by Radial Distance...')
+end
+[BCount_Table,BCount_Titles,BIDs,BIDs_AboveA,R_DEM,RNorm_DEM] = DrainageVolc_CalculateRadialDistanceNumbers(DEM,DB,tot_db_grids.DrainageArea,pack.basinRadIter,channelThreshold);
+DV_Res.DrainageParams.Radial_Analysis.Basin_Count = BCount_Table;
+DV_Res.DrainageParams.Radial_Analysis.Basin_Count_Titles = BCount_Titles;
+DV_Res.DrainageParams.Radial_Analysis.Radial_Distances = R_DEM;
+DV_Res.DrainageParams.Radial_Analysis.Normalized_Radial_Distances = RNorm_DEM;
+DV_Res.DrainageParams.Radial_Analysis.Basin_IDs = BIDs;
+DV_Res.DrainageParams.Radial_Analysis.Basin_IDs_Channelized = BIDs_AboveA;
 
 % Drainage Basin Hypsometry Counts
-[DB_Hyps_Topo,DB_Hyps_numDB,DB_Hyps_numDB_aboveA] = DraingeVolc_Count_VolcTopoBasins(DEMf.Z,DB.Z,tot_db_grids.DrainageArea.Z,hypsIter,channelThreshold);
-mets.DrainageParams.DB_Hyps_Topo = DB_Hyps_Topo;
-mets.DrainageParams.DB_Hyps_numDB = DB_Hyps_numDB;
-mets.DrainageParams.DB_Hyps_numDB_Channelized = DB_Hyps_numDB_aboveA;
+[DB_Hyps_Topo,DB_Hyps_numDB,DB_Hyps_numDB_aboveA] = DraingeVolc_Count_VolcTopoBasins(DEM.Z,DB.Z,tot_db_grids.DrainageArea.Z,pack.hypsIter,channelThreshold);
+DV_Res.DrainageParams.Hypsometry.DB_Hyps_Topo = DB_Hyps_Topo;
+DV_Res.DrainageParams.Hypsometry.DB_Hyps_numDB = DB_Hyps_numDB;
+DV_Res.DrainageParams.Hypsometry.DB_Hyps_numDB_Channelized = DB_Hyps_numDB_aboveA;
 
 % Channelized Drainage Basins Per Contour
-Basin_Contour_ContourP_Count_Length_Area_AboveA = DrainageVolc_Determine_Basin_Per_Contour(DEMf,DB,tot_db_grids.DrainageArea,basinContIter,channelThreshold);
-mets.DrainageParams.Basin_Contour_ContourP_Count_Length_Area_Channelized = Basin_Contour_ContourP_Count_Length_Area_AboveA;
+Basin_Contour_ContourP_Count_Length_Area_AboveA = DrainageVolc_Determine_Basin_Per_Contour(DEM,DB,tot_db_grids.DrainageArea,pack.basinContIter,channelThreshold);
+DV_Res.DrainageParams.Drainage_Basins.Basin_Contour_ContourP_Count_Length_Area_Channelized = Basin_Contour_ContourP_Count_Length_Area_AboveA;
 
 %% Channel Metrics
-disp('Calculating Channel Metrics...')
+if pack.verbose > 0
+    disp('Calculating Channel Metrics...')
+end
 S = STREAMobj(FD,'minarea',channelThreshold,'unit','mapunits');
+DV_Res.ChannelParams.Channels.S = S;
 
-mets.ChannelParams.S = S;
+if isempty(S)
+    warning('NO CHANNELS FOUND, DECREASE DRAINAGE AREA THRESHOLD')
+end
+
+if pack.verbose > 0
+    disp('   Strahler Order...')
+end
+
+SO = streamorder(S);
+DV_Res.ChannelParams.Channels.Stream_Order = SO;
+
+tmpSOG = STREAMobj2GRIDobj(S,SO);
+[tmpSOG,~,~] = GRIDobj2mat(tmpSOG);
 
 % Drainage density
-disp('   Drainage Density...')
+if pack.verbose > 0
+    disp('   Drainage Density...')
+end
 DD = drainagedensity(S,FD,'nal');
 DDG = drainagedensity(S,FD,'grid');
 DB_DD = DB;
-DB_DD.Z = zeros(size(DB.Z))*NaN;
+DB_DD.Z(:) = NaN;
 DB_mDD = DB_DD;
 uniDB = unique(DB.Z(:));
 uniDB(isnan(uniDB)) = [];
 
 sTmp = STREAMobj2GRIDobj(S);
+SOG = DB;
+SOG.Z(:) = NaN;
 
 for i = 1:length(uniDB)
     tmpDB = DB.Z == uniDB(i);
     maxVal = max(max(DDG.Z(tmpDB==1)));
     DB_mDD.Z(tmpDB==1) = maxVal;
 
-    tmpZ = DEMf;
+    maxSO = max(max(tmpSOG(tmpDB==1)));
+
+    tmpZ = DEM;
     tmpZ.Z(DB.Z~=uniDB(i)) = NaN;
     tmpZ.Z(~sTmp.Z) = NaN;
     [ii,jj] = find(tmpZ.Z==min(tmpZ.Z(:)),1);
     if ~isempty(ii)
         DB_DD.Z(tmpDB==1) = DDG.Z(ii,jj);
+        SOG.Z(tmpDB==1) = maxSO;
     end
 end
 
-mets.ChannelParams.DD = DD;
-mets.ChannelParams.MaxDD = DB_mDD;
-mets.ChannelParams.BasinDD = DB_DD;
+DV_Res.ChannelParams.Channels.Max_Stream_Order = SOG;
 
-mets.ChannelParams.TotalDD = DrainageVolc_Collect_Total_DrainageDensity(Z,S,A,DB,dx);
+DV_Res.ChannelParams.Drainage_Density.DD = DD;
+DV_Res.ChannelParams.Drainage_Density.MaxDD = DB_mDD;
+DV_Res.ChannelParams.Drainage_Density.BasinDD = DB_DD;
+
+DV_Res.ChannelParams.Drainage_Density.TotalDD = DrainageVolc_Collect_Total_DrainageDensity(Z,S,A,DB,dx);
+
+% Conformity Index
+if pack.verbose > 0
+    disp('   Channel Conformity Index...')
+end
+
+[totalConformity,basinConformity,basinConformityMap,basinOrderConformity,segmentInfo,filteredDEM] = DrainageVolc_Calculate_ConfomityIndex(DEM0,DEM,boundaryXY,DB,channelThreshold,pack.conformityWavelength,pack.conformityStreamDist,pack.verbose);
+DV_Res.ChannelParams.Conformity.Mean_Total_Conformity = totalConformity;
+DV_Res.ChannelParams.Conformity.Mean_Basin_Conformity = basinConformity;
+DV_Res.ChannelParams.Conformity.Mean_Basin_Conformity_Map = basinConformityMap;
+DV_Res.ChannelParams.Conformity.Mean_Basin_StrahlerOrder_Conformity = basinOrderConformity;
+DV_Res.ChannelParams.Conformity.Segment_Information = segmentInfo;
+DV_Res.ChannelParams.Conformity.Filtered_Topography = filteredDEM;
 
 % Concavity Analysis
-disp('   Channel Concavity...')
-[topN_Ss,topN_S_Stats] = DrainageVolc_Collect_Stream_Concavity(tot_db_stats,DEMf,A,DB,FD,topN_basinIDs,channelThreshold);
+if pack.verbose > 0
+    disp('   Channel Concavity...')
+end
+[topN_Ss,topN_S_Stats] = DrainageVolc_Collect_Stream_Concavity(tot_db_stats,DEM,A,DB,FD,topN_basinIDs,channelThreshold,pack.concavityType);
 
-mets.ChannelParams.Concavity_Streams = topN_Ss;
-mets.ChannelParams.Concavity_Stats = topN_S_Stats;
-mets.ChannelParams.Concavity_BasinIDs = topN_basinIDs;
+DV_Res.ChannelParams.Channel_Concavity.Concavity_Streams = topN_Ss;
+DV_Res.ChannelParams.Channel_Concavity.Concavity_Stats = topN_S_Stats;
+DV_Res.ChannelParams.Channel_Concavity.Concavity_BasinIDs = topN_basinIDs;
 
-conDEM = DEMf;
+conDEM = DEM;
 conDEM.Z(:,:) = NaN;
 for i = 1:length(topN_basinIDs)
     conDEM.Z(DB.Z==topN_basinIDs(i)) = abs(topN_S_Stats(i).theta);
@@ -796,151 +848,228 @@ allTheta = [];
 for i = 1:size(topN_Ss,1)
     allTheta = [allTheta;topN_S_Stats(i).theta];
 end
-mets.ChannelParams.Concavity_Mean = nanmean(allTheta);
-mets.ChannelParams.Concavity_DEM = conDEM;
+DV_Res.ChannelParams.Channel_Concavity.Concavity_Mean = nanmean(allTheta);
+DV_Res.ChannelParams.Channel_Concavity.Concavity_DEM = conDEM;
 
 % Chi
 %   This function uses Beysian optimization to find the best-fitting m/n
 %   ratio for chi.
-disp('   Chi Analysis...')
-
-% Get streams at the same elevation (required for chi).
-[tmpZ,tmpx,tmpy] = GRIDobj2mat(DEM0);
-[tmpX,tmpY] = meshgrid(tmpx,tmpy);
-boundaryZ = interp2(tmpX,tmpY,tmpZ,boundaryXY(:,1),boundaryXY(:,2));
-chiDEM = DEMf;
-chiDEM.Z(chiDEM.Z<max(boundaryZ)) = NaN;
-for i = 1:length(cellCraterXY)
-    p = inpolygon(XG,YG,cellCraterXY{i}(:,1),cellCraterXY{i}(:,2));
-    chiDEM.Z(p==1) = NaN;
-end
-chiFD = FLOWobj(chiDEM,'preprocess','none');
-chiS = STREAMobj(chiFD,'minarea',channelThreshold,'unit','mapunits');
-mets.ChannelParams.chiS = chiS;
-
-chiS_topN = klargestconncomps(chiS,length(topN_basinIDs));
-mets.ChannelParams.chiS_topN = chiS_topN;
-
-if ~isempty(chiS_topN.ix)
-    try
-        if isnan(MN)
-            if ~plotResults
-                try
-                    [MN,~,~,~] = mnoptimvar(chiS_topN,DEMf,A,'varfun',@robustcov,'plot',false);
-                catch
-                    [MN,~,~,~] = mnoptimvar(chiS_topN,DEMf,A,'plot',false);
-                end
-            else
-                figure('Name','M / N Optimization','units','normalized','outerposition',[0 0 1 1])
-                try
-                    [MN,~,~,~] = mnoptimvar(chiS_topN,DEMf,A,'varfun',@robustcov);
-                catch
-                    [MN,~,~,~] = mnoptimvar(chiS_topN,DEMf,A);
-                end
-                if ~isempty(saveFigFolder)
-                    saveas(gcf,[saveFigFolder,figPrefix,'MN_Optimization.fig']);
-                    saveas(gcf,[saveFigFolder,figPrefix,'MN_Optimization.png']);
-                end
-            end
-        end
-    
-        Chi = chitransform(chiS,A,'a0',channelThreshold,'mn',MN);
-        ChiG = STREAMobj2GRIDobj(chiS,Chi);
-        DB_Chi = DB;
-        DB_Chi.Z = zeros(size(DB.Z))*NaN;
-        uniDB = unique(DB.Z(:));
-        for i = 1:length(uniDB)
-                tmpDB = DB.Z == uniDB(i);
-                maxVal = max(max(ChiG.Z(tmpDB==1)));
-                
-                DB_Chi.Z(tmpDB==1) = maxVal;
-        end
-
-        Upstream_Chi = DrainageVolc_Project_Chi_Upstream(DEMf,DB,chiS,Chi);
-    catch
-        MN = NaN;
-        Chi = NaN;
-        DB_Chi = NaN;
-        Upstream_Chi = NaN;
-    end
-else
-    MN = NaN;
-    Chi = NaN;
-    DB_Chi = NaN;
-    Upstream_Chi = NaN;
+if pack.verbose > 0
+    disp('   Chi Analysis...')
 end
 
-mets.ChannelParams.BestFit_MN = MN;
-mets.ChannelParams.Chi = Chi;
-mets.ChannelParams.MaxChi = DB_Chi;
-mets.ChannelParams.UpstreamChi = Upstream_Chi;
+[Total_Chi_Class,Individual_Chi_Class,Chi_Cutoff_Elevation] = DrainageVolc_Calculate_Chi(DEM0,DEM,DB,...
+    boundaryXY,craterXY,channelThreshold,topN_basinIDs,MN,pack.plotResults,pack.saveFigFolder,pack.figPrefix,pack.parallelProc,pack.chi_Zcutoff,pack.chi_removeUpperBasins,pack.verbose);
+
+DV_Res.ChannelParams.Chi.Total_Chi = Total_Chi_Class;
+DV_Res.ChannelParams.Chi.Basin_Chi = Individual_Chi_Class;
+DV_Res.ChannelParams.Chi.Chi_Cutoff_Elevation = Chi_Cutoff_Elevation;
+
+% Knickpoint Analysis
+if pack.verbose > 0
+    disp('   Knickpoint Locations...')
+end
+kn_ID_BID_XY_Dist_DZ = DrainageVolc_Find_Knickpoints(DEM,DB,channelThreshold,pack.knickpointTolerance,pack.parallelProc,pack.verbose);
+DV_Res.ChannelParams.Channels.Knickpoint_ID_BID_XY_StreamDist_DZ = kn_ID_BID_XY_Dist_DZ;
 
 %% Divide Metrics
-disp('Calculating Divide Metrics...')
 if ~pack.Analyze_Divides
-    mets.DivideParams = [];
+    DV_Res.DivideParams = [];
 else
-
+    if pack.verbose > 0
+        disp('Calculating Divide Metrics...')
+    end
     % Collect divides
-    DVD_Topo = DIVIDEobj(FD,S,'type','topo');
-    DVD_Topo = cleanedges(DVD_Topo,FD);
-    DVD_Topo = sort(DVD_Topo);
+    if isempty(S)
+        warning('IGNORING DIVIDES SINCE NO CHANNELS FOUND')
+        DV_Res.DivideParams.Divide_Topo = [];
+        DV_Res.DivideParams.Divide_ReliefDistance = [];
+        DV_Res.DivideParams.Divide_AsymmetryIndex = [];
+        DV_Res.DivideParams.DAI_Gamma = [];
+        DV_Res.DivideParams.DAI_Gamma_Corrected = [];
+        DV_Res.DivideParams.Divide_TotalChiDifference = [];
+        DV_Res.DivideParams.Divide_BasinChiDifference = [];
+        DV_Res.DivideParams.Junction_X_Y_C_Z_D_A = [];
+        DV_Res.DivideParams.VerticalDistance = [];
+    else
+        DVD_Topo = DIVIDEobj(FD,S,'type','topo');
+        DVD_Topo = cleanedges(DVD_Topo,FD);
+        DVD_Topo = sort(DVD_Topo);
+        DVD_Topo = divorder(DVD_Topo);
+        
+        % Order divides and find their roots
+        [X_Topo,Y_Topo] = ind2coord(DVD_Topo,DVD_Topo.IX(1:end-1));
+        
+        Divide_Topo.DVD = DVD_Topo;
+        Divide_Topo.X = X_Topo;
+        Divide_Topo.Y = Y_Topo;
+        DV_Res.DivideParams.Divide_Topo = Divide_Topo;
+        
+        % Calculate Divide Asymmetry Index
+        if pack.verbose > 0
+            disp('   Divide Asymmetry Index (DAI)...')
+        end
+        vertDist = vertdistance2stream(FD,S,DEM);
+        vertDist.Z(isinf(vertDist.Z)) = NaN;
+        
+        [pp,qq] = getvalue(DVD_Topo,vertDist);
+        reliefDistance = abs(diff(abs([pp,qq]),1,2));
+        asymIndex = reliefDistance./sum([pp,qq],2);
+        asymIndex(asymIndex<0) = 0;
+        asymIndex(isinf(asymIndex)) = NaN;
+        
+        DV_Res.DivideParams.Divide_ReliefDistance = reliefDistance;
+        DV_Res.DivideParams.Divide_AsymmetryIndex = asymIndex;
     
-    % Order divides and find their roots
-    [X_Topo,Y_Topo] = ind2coord(DVD_Topo,DVD_Topo.IX(1:end-1));
+        % Calculate DAI integral
+        if pack.verbose > 0
+            disp('   DAI Integral (Gamma)...')
+        end
     
-    Divide_Topo.DVD = DVD_Topo;
-    Divide_Topo.X = X_Topo;
-    Divide_Topo.Y = Y_Topo;
-    mets.DivideParams.Divide_Topo = Divide_Topo;
+        tmp = asymIndex;
+        tmp(DVD_Topo.order < pack.Divide_Order_Cutoff) = NaN;
+        tmp(isnan(tmp)) = [];
     
-    % Calculate Hillslope Asymmetry Values
-    disp('   Hillslope Asymmetry...')
-    vertDist = vertdistance2stream(FD,S,DEMf);
-    vertDist.Z(isinf(vertDist.Z)) = NaN;
+        asBins = 0:pack.DAI_Integral_BinWidth:1;
+        [DAI_PDF,~] = histcounts(tmp,asBins,'Normalization','pdf');
+        gamma = trapz(pack.DAI_Integral_BinWidth,DAI_PDF);
+        gammaStruct.PDF = DAI_PDF;
+        gammaStruct.Bins = asBins;
+        gammaStruct.Bin_Midpoints = asBins(1:end-1)+pack.DAI_Integral_BinWidth/2;
+        gammaStruct.Gamma = gamma;
     
-    [pp,qq] = getvalue(DVD_Topo,vertDist);
-    reliefDistance = abs(diff(abs([pp,qq]),1,2));
-    asymIndex = reliefDistance./sum([pp,qq],2);
-    asymIndex(asymIndex<0) = 0;
-    asymIndex(isinf(asymIndex)) = NaN;
+        DV_Res.DivideParams.DAI_Gamma = gammaStruct;
     
-    mets.DivideParams.Divide_ReliefDistance = reliefDistance;
-    mets.DivideParams.Divide_AsymmetryIndex = asymIndex;
-
-    % Calculate Chi differences across the divide
-    disp('   Chi differences...')
-    try
-        [pp,qq] = getvalue(DVD_Topo,Upstream_Chi);
-        chiDifference = abs(diff(abs([pp,qq]),1,2));
-    catch
-        chiDifference = NaN;
+        % Corrected DAI integral (with no 1s)
+        tmp(tmp==1) = [];
+        asBins = 0:pack.DAI_Integral_BinWidth:1;
+        [DAI_PDF,~] = histcounts(tmp,asBins,'Normalization','pdf');
+        gamma = trapz(pack.DAI_Integral_BinWidth,DAI_PDF);
+        gammaStruct2.PDF = DAI_PDF;
+        gammaStruct2.Bins = asBins;
+        gammaStruct2.Bin_Midpoints = asBins(1:end-1)+pack.DAI_Integral_BinWidth/2;
+        gammaStruct2.Gamma = gamma;
+    
+        DV_Res.DivideParams.DAI_Gamma_Corrected = gammaStruct2;
+    
+        % Calculate Chi differences across the divide
+        if pack.verbose > 0
+            disp('   Chi differences...')
+        end
+        try
+            [pp,qq] = getvalue(DVD_Topo,Total_Chi_Class.Upstream_Chi);
+            totalChiDifference = abs(diff(abs([pp,qq]),1,2));
+        catch
+            totalChiDifference = NaN;
+        end
+        DV_Res.DivideParams.Divide_TotalChiDifference = totalChiDifference;
+    
+        try
+            [pp,qq] = getvalue(DVD_Topo,Individual_Chi_Class.Upstream_Chi);
+            basinChiDifference = abs(diff(abs([pp,qq]),1,2));
+        catch
+            basinChiDifference = NaN;
+        end
+        DV_Res.DivideParams.Divide_BasinChiDifference = basinChiDifference;
+        
+        % Determine Divide Connectivity
+        if pack.verbose > 0    
+            disp('   Divide Connectivity...')
+        end
+        try
+            [CJ,CJ_x,CJ_y] = jctcon(DVD_Topo);
+            Junction_X_Y_C_Z_D_A = DrainageVolc_Collect_JunctionStats(DEM,DVD_Topo,asymIndex,CJ,CJ_x,CJ_y);
+        catch er
+            Junction_X_Y_C_Z_D_A = [NaN,NaN,NaN,NaN,NaN,NaN];
+        end
+        
+        DV_Res.DivideParams.Junction_X_Y_C_Z_D_A = Junction_X_Y_C_Z_D_A;
+        DV_Res.DivideParams.VerticalDistance = vertDist;
     end
-    mets.DivideParams.Divide_ChiDifference = chiDifference;
-    
-    % Determine Divide Connectivity
-    disp('   Divide Connectivity...')
-    try
-        [CJ,CJ_x,CJ_y] = jctcon(DVD_Topo);
-        Junction_X_Y_C_Z_D_A = DrainageVolc_Collect_JunctionStats(DEMf,DVD_Topo,asymIndex,CJ,CJ_x,CJ_y);
-    catch er
-        Junction_X_Y_C_Z_D_A = [NaN,NaN,NaN,NaN,NaN,NaN];
-    end
-    
-    mets.DivideParams.Junction_X_Y_C_Z_D_A = Junction_X_Y_C_Z_D_A;
-    mets.DivideParams.VerticalDistance = vertDist;
 end
 
 %% Save All Results
-mets.GeneralParams.EndTime = datetime('now');
-if ~isempty(saveResFolder)
-    disp('Saving Results...')
-    save([saveResFolder,figPrefix,'DrainageVolc_Results.mat'],'mets')
+DV_Res.GeneralParams.EndTime = datetime('now');
+if ~isempty(pack.saveResFolder)
+    if pack.verbose > 0   
+        disp('Saving Results...')
+    end
+    save([pack.saveResFolder,pack.figPrefix,'DrainageVolc_Results.mat'],'DV_Res')
+end
+
+%% Save Inputs
+if pack.saveInputs && ~isempty(pack.saveResFolder)
+    if pack.verbose > 0   
+        disp('Writing Input Text File...')
+    end
+
+    tmpTif = pack.tifFile;
+    tmpMask = pack.maskXY;
+    tmpCrat = pack.craterXY;
+
+    if ~ischar(tmpTif)
+        pack.tifFile = 'GRIDobj';
+    end
+
+    if isempty(tmpMask)
+        pack.maskXY = '[]';
+    elseif iscell(tmpMask)
+        pack.maskXY = 'Cell array';
+    elseif ~ischar(tmpMask)
+        pack.maskXY = 'Array';
+    end
+
+    if isempty(tmpCrat)
+        pack.craterXY = '[]';
+    elseif iscell(tmpCrat)
+        pack.craterXY = 'Cell array';
+    elseif ~ischar(tmpCrat)
+        pack.craterXY = 'Array';
+    end
+
+    Export_Inputs(pack,'DrainageVolc');
+
+    pack.tifFile = tmpTif;
+    pack.maskXY = tmpMask;
+    pack.craterXY = tmpCrat;
 end
 
 %% Plot Results
-if plotResults
-    disp('Plotting Results...')
-    DrainageVolc_Plots(mets);
+if pack.plotResults
+    if pack.verbose > 0   
+        disp('Plotting Results...')
+    end
+    DrainageVolc_Plots(DV_Res);
+end
+
+%% Zipping and Folder Deletion
+if pack.zipFiles > 0
+    if pack.verbose > 0   
+        disp('Zipping Results...')
+    end
+
+    origPath = pwd;
+    sameFol = (~isempty(pack.saveFigFolder) && ~isempty(pack.saveResFolder) && strcmp(pack.saveFigFolder,pack.saveResFolder));
+
+    if sameFol || (~isempty(pack.saveFigFolder) && (pack.zipFiles == 1 || pack.zipFiles == 3))
+        if pack.verbose > 0  && strcmp(pack.saveFigFolder,pack.saveResFolder)
+            disp('   Matlab and figure files are in the same folder and will be zipped together.')
+        elseif pack.verbose > 1
+            disp('   Zipping figure folder...')
+        end
+
+        Zip_Delete_Folder(pack.saveFigFolder,(pack.deleteAfterZip == 1 || pack.deleteAfterZip == 3))
+    end
+
+    if ~sameFol && (~isempty(pack.saveResFolder) && (pack.zipFiles == 2 || pack.zipFiles == 3))
+        if pack.verbose > 1
+            disp('   Zipping results folder...')
+        end
+
+        Zip_Delete_Folder(pack.saveResFolder,(pack.deleteAfterZip == 2 || pack.deleteAfterZip == 3))
+    end
+
+    cd(origPath)
 end
 end
+

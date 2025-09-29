@@ -1,4 +1,4 @@
-function [Ss,S_Stats] = DrainageVolc_Collect_Stream_Concavity(bIAL,DEM,A,DB,FD,basinIDs,channelThreshold)
+function [Ss,S_Stats] = DrainageVolc_Collect_Stream_Concavity(bIAL,DEM,A,DB,FD,basinIDs,channelThreshold,conType)
 % Name: SeparateKLargestStreams
 % Author: Daniel O'Hara
 % Date: 05/11/2021 (mm/dd/yyyy)
@@ -33,13 +33,8 @@ end
 bIAL(keep==0,:) = [];
 bIAL = sortrows(bIAL,2,'descend');
 
-
-% bIAL = sortrows(bIAL,2,'descend');
-% bIAL(topN+1:end,:) = [];
-% basinIDs = bIAL(:,1);
-
 [dbG,~,~] = GRIDobj2mat(DB);
-
+warning('off','all')
 for i = 1:size(bIAL,1)
     dbT = dbG==bIAL(i,1);
     [FDc,~] = crop(FD,dbT);
@@ -48,13 +43,26 @@ for i = 1:size(bIAL,1)
     
     try
         S = STREAMobj(FDc,'minarea',channelThreshold,'unit','mapunits');
-        Stats = slopearea(S,DEMc,Ac,'plot',false,'fitmethod','logtrls');
-        if abs(Stats.theta) > 2
-            Stats.a = NaN;
-            Stats.g = NaN;
-            Stats.ks = NaN;
-            Stats.theta = NaN;
+        if strcmp(conType,'ls') || strcmp(conType,'lad') || strcmp(conType,'logtrls')
+            evalc('Stats = slopearea(S,DEMc,Ac,''plot'',false,''fitmethod'',conType,''mingradient'',.001);');
+        else
+            evalc('Stats = slopearea(S,DEMc,Ac,''plot'',false,''fitmethod'',''lad'',''mingradient'',.001);');
+            a = Stats.a(Stats.g>1e-3);
+            g = Stats.g(Stats.g>1e-3);
+
+            if strcmp(conType,'lin')
+                coeffs = polyfit(log10(a),log10(g),1);
+                Stats.ks = 10^coeffs(2);
+                Stats.theta = coeffs(1);
+            elseif strcmp(conType,'nlin')
+                [beta,~,~,~,~] = nlinfit(Stats.a,Stats.g,@(b,x) b(1)*x.^b(2),[Stats.ks Stats.theta]);
+                Stats.ks = beta(1);
+                Stats.theta = beta(2);
+            end
         end
+
+        Stats.a(Stats.g<=1e-3) = NaN;
+        Stats.g(Stats.g<=1e-3) = NaN;
     catch er
         Stats.a = NaN;
         Stats.g = NaN;
@@ -64,4 +72,6 @@ for i = 1:size(bIAL,1)
     
     Ss = [Ss;S];
     S_Stats = [S_Stats;Stats];
+end
+warning('on','all')
 end
