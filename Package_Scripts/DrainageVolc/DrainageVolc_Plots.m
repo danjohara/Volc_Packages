@@ -86,7 +86,7 @@ try
     ylabel(cb,'Elevation (m)')
     setAxes(cb,0)
     title([tPre,'Raw Elevations'])
-    
+
 
     subplot(1,2,2)
     hold on
@@ -230,7 +230,7 @@ try
     xlabel('X (km)')
     ylabel('Y (km)')
     setAxes(gca,fs)
-    
+
     cb = colorbar;
     ylabel(cb,'Basin ID')
     setAxes(cb,0)
@@ -257,132 +257,140 @@ end
 
 %% Hack's Law Plot - Basin Length
 try
-    tmpMap = DP.Hacks_Law.HackLawDeviation_BasinLength_Map;
-    figure
-    pcolor(tmpMap.Z);shading flat;
-    bwrCM = colormap(bluewhitered(255));
-    close
-
     HL = DP.Hacks_Law.HackLawDeviation_BasinLength;
-    figure('Name','Hack''s Law Relationship (Basin Length)','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
-    colormap(bwrCM)
-    subplot(1,2,1)
-    hold on
-    tmpRangeA = [min(HL(:,2)),max(HL(:,2))];
-    tmp = scatter(HL(HL(:,5)==1,2),HL(HL(:,5)==1,3),ones(size(HL(HL(:,5)==1,2)))*200,HL(HL(:,5)==1,4),'o','filled','markeredgecolor','k');
-    pp = [tmp];
-    pL = {'Volcano Basins'};
-    if sum(HL(:,5)==0) > 0
-        tmp = plot(HL(HL(:,5)==0,2),HL(HL(:,5)==0,3),'.k');
-        pp = [pp;tmp];
-        pL = [pL;{'Excluded Basins'}];
-        for i = 1:size(HL,1)
-            if HL(i,5)==0
-                tmpMap.Z(DP.Drainage_Basins.DB.Z==HL(i,1)) = NaN;
+    if sum(HL(:,5)) == 0 
+        warning('Cannot plot Basin Length Hack''s Law; not enough analyzed basins')
+    else
+        tmpMap = DP.Hacks_Law.HackLawDeviation_BasinLength_Map;
+        figure
+        pcolor(tmpMap.Z);shading flat;
+        bwrCM = colormap(bluewhitered(255));
+        close
+
+        figure('Name','Hack''s Law Relationship (Basin Length)','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
+        colormap(bwrCM)
+        subplot(1,2,1)
+        hold on
+        tmpRangeA = [min(HL(:,2)),max(HL(:,2))];
+        tmp = scatter(HL(HL(:,5)==1,2),HL(HL(:,5)==1,3),ones(size(HL(HL(:,5)==1,2)))*200,HL(HL(:,5)==1,4),'o','filled','markeredgecolor','k');
+        pp = [tmp];
+        pL = {'Volcano Basins'};
+        if sum(HL(:,5)==0) > 0
+            tmp = plot(HL(HL(:,5)==0,2),HL(HL(:,5)==0,3),'.k');
+            pp = [pp;tmp];
+            pL = [pL;{'Excluded Basins'}];
+            for i = 1:size(HL,1)
+                if HL(i,5)==0
+                    tmpMap.Z(DP.Drainage_Basins.DB.Z==HL(i,1)) = NaN;
+                end
             end
         end
-    end
-    tmp = plot(tmpRangeA,DP.Hacks_Law.HackLawFit_BasinLength(1)*tmpRangeA.^DP.Hacks_Law.HackLawFit_BasinLength(2),'-k','linewidth',2);
-    pp = [pp;tmp];
-    pL = [pL;{sprintf('Best Fit (L = %.2f A^{%.2f})',DP.Hacks_Law.HackLawFit_BasinLength(1),DP.Hacks_Law.HackLawFit_BasinLength(2))}];
-    xlim(tmpRangeA)
-
-    set(gca,'yscale','log')
-    set(gca,'xscale','log')
-    setAxes(gca,fs)
-
-    xlabel('Basin Drainage Area (m^2)')
-    ylabel('Basin Length (m)')
-    axis tight
-    axis square
-    box on
-    if GI.inputs.limitHacksLaw
-        yy = ylim;
-        tmp = plot([1,1]*CP.Channels.ChannelThreshold,yy,'--r','linewidth',2);
+        tmp = plot(tmpRangeA,DP.Hacks_Law.HackLawFit_BasinLength(1)*tmpRangeA.^DP.Hacks_Law.HackLawFit_BasinLength(2),'-k','linewidth',2);
         pp = [pp;tmp];
-        pL = [pL;{'Channelization Threshold'}];
+        pL = [pL;{sprintf('Best Fit (L = %.2f A^{%.2f})',DP.Hacks_Law.HackLawFit_BasinLength(1),DP.Hacks_Law.HackLawFit_BasinLength(2))}];
+        xlim(tmpRangeA)
+
+        set(gca,'yscale','log')
+        set(gca,'xscale','log')
+        setAxes(gca,fs)
+
+        xlabel('Basin Drainage Area (m^2)')
+        ylabel('Basin Length (m)')
+        axis tight
+        axis square
+        box on
+        if GI.inputs.limitHacksLaw
+            yy = ylim;
+            tmp = plot([1,1]*CP.Channels.ChannelThreshold,yy,'--r','linewidth',2);
+            pp = [pp;tmp];
+            pL = [pL;{'Channelization Threshold'}];
+        end
+        legend(pp,pL,'location','northwest')
+        title([tPre,'Hack''s Law Relationship (Basin Length)'])
+
+        subplot(1,2,2)
+        hold on
+        imageschs(GP.DEM,tmpMap,'colormap',bwrCM,'tickstokm',true)
+        plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
+        plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k')
+
+        xlabel('X (km)')
+        ylabel('Y (km)')
+        setAxes(gca,fs)
+
+        cb = colorbar;
+        ylabel(cb,'Deviation from Power Law (m)')
+        setAxes(gca,0)
+        title([tPre,sprintf('Basin Length Deviation from\nHack''s Law (Basin Length)')])
+        savePlot(GI,gcf,'Hacks_Law_Relationship_BasinLength')
     end
-    legend(pp,pL,'location','northwest')
-    title([tPre,'Hack''s Law Relationship (Basin Length)'])
-
-    subplot(1,2,2)
-    hold on
-    imageschs(GP.DEM,tmpMap,'colormap',bwrCM,'tickstokm',true)
-    plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
-    plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k')
-
-    xlabel('X (km)')
-    ylabel('Y (km)')
-    setAxes(gca,fs)
-
-    cb = colorbar;
-    ylabel(cb,'Deviation from Power Law (m)')
-    setAxes(gca,0)
-    title([tPre,sprintf('Basin Length Deviation from\nHack''s Law (Basin Length)')])
-    savePlot(GI,gcf,'Hacks_Law_Relationship_BasinLength')
 catch
     warning('Could not plot Basin Length Hack''s Law')
 end
 
 %% Hack's Law Plot - Basin Flow Length
 try
-    figure
-    pcolor(DP.Hacks_Law.HackLawDeviation_FlowLength_Map.Z);shading flat;
-    bwrCM = colormap(bluewhitered(255));
-    close
-
     HL = DP.Hacks_Law.HackLawDeviation_FlowLength;
-    figure('Name','Hack''s Law Relationship (Basin Flow Length)','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
-    colormap(bwrCM)
-    subplot(1,2,1)
-    hold on
-    tmpRangeA = [min(HL(:,2)),max(HL(:,2))];
-    tmp = scatter(HL(HL(:,5)==1,2),HL(HL(:,5)==1,3),ones(size(HL(HL(:,5)==1,2)))*200,HL(HL(:,5)==1,4),'o','filled','markeredgecolor','k');
-    pp = [tmp];
-    pL = {'Volcano Basins'};
-    if sum(HL(:,5)==0) > 0
-        tmp = plot(HL(HL(:,5)==0,2),HL(HL(:,5)==0,3),'.k');
+    if sum(HL(:,5)) == 0
+        warning('Cannot plot Flow Length Hack''s Law; not enough analyzed basins')
+    else
+        figure
+        pcolor(DP.Hacks_Law.HackLawDeviation_FlowLength_Map.Z);shading flat;
+        bwrCM = colormap(bluewhitered(255));
+        close
+
+        figure('Name','Hack''s Law Relationship (Basin Flow Length)','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
+        colormap(bwrCM)
+        subplot(1,2,1)
+        hold on
+        tmpRangeA = [min(HL(:,2)),max(HL(:,2))];
+        tmp = scatter(HL(HL(:,5)==1,2),HL(HL(:,5)==1,3),ones(size(HL(HL(:,5)==1,2)))*200,HL(HL(:,5)==1,4),'o','filled','markeredgecolor','k');
+        pp = [tmp];
+        pL = {'Volcano Basins'};
+        if sum(HL(:,5)==0) > 0
+            tmp = plot(HL(HL(:,5)==0,2),HL(HL(:,5)==0,3),'.k');
+            pp = [pp;tmp];
+            pL = [pL;{'Excluded Basins'}];
+        end
+        tmp = plot(tmpRangeA,DP.Hacks_Law.HackLawFit_FlowLength(1)*tmpRangeA.^DP.Hacks_Law.HackLawFit_FlowLength(2),'-k','linewidth',2);
         pp = [pp;tmp];
-        pL = [pL;{'Excluded Basins'}];
+        pL = [pL;{sprintf('Best Fit (L = %.2f A^{%.2f})',DP.Hacks_Law.HackLawFit_FlowLength(1),DP.Hacks_Law.HackLawFit_FlowLength(2))}];
+        xlim(tmpRangeA)
+
+        set(gca,'yscale','log')
+        set(gca,'xscale','log')
+        setAxes(gca,fs)
+
+        xlabel('Basin Drainage Area (m^2)')
+        ylabel('Max Basin Flow Length (m)')
+        axis tight
+        axis square
+        box on
+        if GI.inputs.limitHacksLaw
+            yy = ylim;
+            tmp = plot([1,1]*CP.Channels.ChannelThreshold,yy,'--r','linewidth',2);
+            pp = [pp;tmp];
+            pL = [pL;{'Channelization Threshold'}];
+        end
+        legend(pp,pL,'location','northwest')
+        title([tPre,'Hack''s Law Relationship (Basin Flow Length)'])
+
+        subplot(1,2,2)
+        hold on
+        imageschs(GP.DEM,DP.Hacks_Law.HackLawDeviation_FlowLength_Map,'colormap',bwrCM,'tickstokm',true)
+        plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
+        plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k')
+
+        xlabel('X (km)')
+        ylabel('Y (km)')
+        setAxes(gca,fs)
+
+        cb = colorbar;
+        ylabel(cb,'Deviation from Power Law (m)')
+        setAxes(gca,0)
+        title([tPre,sprintf('Basin Length Deviation from\nHack''s Law (Flow Length)')])
+        savePlot(GI,gcf,'Hacks_Law_Relationship_FlowLength')
     end
-    tmp = plot(tmpRangeA,DP.Hacks_Law.HackLawFit_FlowLength(1)*tmpRangeA.^DP.Hacks_Law.HackLawFit_FlowLength(2),'-k','linewidth',2);
-    pp = [pp;tmp];
-    pL = [pL;{sprintf('Best Fit (L = %.2f A^{%.2f})',DP.Hacks_Law.HackLawFit_FlowLength(1),DP.Hacks_Law.HackLawFit_FlowLength(2))}];
-    xlim(tmpRangeA)
-
-    set(gca,'yscale','log')
-    set(gca,'xscale','log')
-    setAxes(gca,fs)
-
-    xlabel('Basin Drainage Area (m^2)')
-    ylabel('Max Basin Flow Length (m)')
-    axis tight
-    axis square
-    box on
-    if GI.inputs.limitHacksLaw
-        yy = ylim;
-        tmp = plot([1,1]*CP.Channels.ChannelThreshold,yy,'--r','linewidth',2);
-        pp = [pp;tmp];
-        pL = [pL;{'Channelization Threshold'}];
-    end
-    legend(pp,pL,'location','northwest')
-    title([tPre,'Hack''s Law Relationship (Basin Flow Length)'])
-
-    subplot(1,2,2)
-    hold on
-    imageschs(GP.DEM,DP.Hacks_Law.HackLawDeviation_FlowLength_Map,'colormap',bwrCM,'tickstokm',true)
-    plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
-    plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k')
-
-    xlabel('X (km)')
-    ylabel('Y (km)')
-    setAxes(gca,fs)
-
-    cb = colorbar;
-    ylabel(cb,'Deviation from Power Law (m)')
-    setAxes(gca,0)
-    title([tPre,sprintf('Basin Length Deviation from\nHack''s Law (Flow Length)')])
-    savePlot(GI,gcf,'Hacks_Law_Relationship_FlowLength')
 catch
     warning('Could not plot Flow Length Hack''s Law')
 end
@@ -643,7 +651,9 @@ try
     setAxes(cb,0)
     title([tPre,'Basin Euclidean Length'])
     cax = caxis;
-    caxis([1,cax(2)])
+    if cax(2) > 1
+        caxis([1,cax(2)])
+    end
 
     % Basin Sinuosity Map
     subplot(2,2,3)
@@ -660,10 +670,12 @@ try
     setAxes(cb,0)
     title([tPre,'Basin Flow Sinuosity'])
     cax = caxis;
-    caxis([1,cax(2)])
+    if cax(2) > 1
+        caxis([1,cax(2)])
+    end
 
     % Basin Order
-    if ~isempty(CP.Channels.S)
+    if ~isempty(CP.Channels.S) && ~isempty(CP.Channels.S.x)
         mo = nanmax(CP.Channels.Max_Stream_Order.Z(:));
         mSpacing = (mo-1)/mo;
         mStart = 1+mSpacing/2;
@@ -674,19 +686,19 @@ try
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Maximum Stream Order')
         caxis([1,mo])
         set(cb,'ytick',mStart:mSpacing:mo)
         set(cb,'yticklabel',1:mo)
-    
+
         setAxes(cb,0)
         title([tPre,'Basin Strahler Stream Order'])
     end
 
     savePlot(GI,gcf,'Basin_Total_Statistics_3')
-catch
+catch 
     warning('Could not plot Basin Statistics 3')
 end
 
@@ -858,63 +870,67 @@ end
 
 %% Cross-Basin Statistics
 try
-    figure('Name','Basin Cross Statistics','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
-    % Basin Widths
-    subplot(2,2,1)
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false,'tickstokm',true)
-    hold on
-    plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k','linewidth',.5)
-    scatter(DP.Basin_Statistics.Basin_Cross_Statistics(:,2)./1000,DP.Basin_Statistics.Basin_Cross_Statistics(:,3)./1000,[],DP.Basin_Statistics.Basin_Cross_Statistics(:,5),'o','filled')
-    plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
+    if isempty(DP.Drainage_Basins.DBxy)
+        warning('Cannot plot Cross-Basin Stats; no discernable basins')
+    else
+        figure('Name','Basin Cross Statistics','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
+        % Basin Widths
+        subplot(2,2,1)
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false,'tickstokm',true)
+        hold on
+        plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k','linewidth',.5)
+        scatter(DP.Basin_Statistics.Basin_Cross_Statistics(:,2)./1000,DP.Basin_Statistics.Basin_Cross_Statistics(:,3)./1000,[],DP.Basin_Statistics.Basin_Cross_Statistics(:,5),'o','filled')
+        plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
 
-    xlabel('X (km)')
-    ylabel('Y (km)')
-    setAxes(gca,fs)
+        xlabel('X (km)')
+        ylabel('Y (km)')
+        setAxes(gca,fs)
 
-    cb = colorbar;
-    ylabel(cb,'Width (m)')
-    setAxes(cb,0)
-    title([tPre,'Cross-Basin Widths'])
-    colormap(gca,flipud(crameri('davos')))
+        cb = colorbar;
+        ylabel(cb,'Width (m)')
+        setAxes(cb,0)
+        title([tPre,'Cross-Basin Widths'])
+        colormap(gca,flipud(crameri('davos')))
 
-    % Basin Relief
-    subplot(2,2,2)
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false,'tickstokm',true)
-    hold on
-    plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k','linewidth',.5)
-    scatter(DP.Basin_Statistics.Basin_Cross_Statistics(:,2)./1000,DP.Basin_Statistics.Basin_Cross_Statistics(:,3)./1000,[],DP.Basin_Statistics.Basin_Cross_Statistics(:,6),'o','filled')
-    plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
+        % Basin Relief
+        subplot(2,2,2)
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false,'tickstokm',true)
+        hold on
+        plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k','linewidth',.5)
+        scatter(DP.Basin_Statistics.Basin_Cross_Statistics(:,2)./1000,DP.Basin_Statistics.Basin_Cross_Statistics(:,3)./1000,[],DP.Basin_Statistics.Basin_Cross_Statistics(:,6),'o','filled')
+        plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
 
-    xlabel('X (km)')
-    ylabel('Y (km)')
-    setAxes(gca,fs)
+        xlabel('X (km)')
+        ylabel('Y (km)')
+        setAxes(gca,fs)
 
-    cb = colorbar;
-    ylabel(cb,'Relief (m)')
-    setAxes(cb,0)
-    title([tPre,'Cross-Basin Relief'])
-    colormap(gca,flipud(crameri('acton')))
+        cb = colorbar;
+        ylabel(cb,'Relief (m)')
+        setAxes(cb,0)
+        title([tPre,'Cross-Basin Relief'])
+        colormap(gca,flipud(crameri('acton')))
 
-    % Basin Incision
-    subplot(2,2,[3,4])
-    imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false,'tickstokm',true)
-    hold on
-    plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k','linewidth',.5)
-    scatter(DP.Basin_Statistics.Basin_Cross_Statistics(:,2)./1000,DP.Basin_Statistics.Basin_Cross_Statistics(:,3)./1000,[],log10(DP.Basin_Statistics.Basin_Cross_Statistics(:,7)),'o','filled')
-    plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
+        % Basin Incision
+        subplot(2,2,[3,4])
+        imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false,'tickstokm',true)
+        hold on
+        plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k','linewidth',.5)
+        scatter(DP.Basin_Statistics.Basin_Cross_Statistics(:,2)./1000,DP.Basin_Statistics.Basin_Cross_Statistics(:,3)./1000,[],log10(DP.Basin_Statistics.Basin_Cross_Statistics(:,7)),'o','filled')
+        plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
 
-    xlabel('X (km)')
-    ylabel('Y (km)')
-    setAxes(gca,fs)
+        xlabel('X (km)')
+        ylabel('Y (km)')
+        setAxes(gca,fs)
 
-    caxis([-3,0])
-    cb = colorbar;
-    ylabel(cb,'Log_{10} Incision Index')
-    setAxes(cb,0)
-    title({[tPre,'Cross-Basin Incision Index']; '(Relief / Width)'})
-    colormap(gca,flipud(crameri('lajolla')))
+        caxis([-3,0])
+        cb = colorbar;
+        ylabel(cb,'Log_{10} Incision Index')
+        setAxes(cb,0)
+        title({[tPre,'Cross-Basin Incision Index']; '(Relief / Width)'})
+        colormap(gca,flipud(crameri('lajolla')))
 
-    savePlot(GI,gcf,'Cross_Basin_Statistics')
+        savePlot(GI,gcf,'Cross_Basin_Statistics')
+    end
 catch
     warning('Could not plot Cross-Basin Statistics')
 end
@@ -1011,7 +1027,7 @@ end
 
 %% Channels
 try
-    if isempty(CP.Channels.S)
+    if isempty(CP.Channels.S) || isempty(CP.Channels.S.x)
         warning('Cannot plot Channels; no channels exist')
     else
         figure('Name','Channels','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
@@ -1020,16 +1036,16 @@ try
         imageschs(GP.DEM,[],'colormap',demcmap(GP.DEM.Z),'tickstokm',true)
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
         plot(kmS,'-k','linewidth',2)
-    
+
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Elevation (m)')
         setAxes(cb,0)
         title([tPre,sprintf('Drainage Channels (Threshold = %.2f km^2)',CP.Channels.ChannelThreshold./1e6)])
-    
+
         subplot(1,2,2)
         hold on
         imageschs(GP.DEM,[],'colormap',[1 1 1],'colorbar',false,'tickstokm',true)
@@ -1043,13 +1059,13 @@ try
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Knickpoint Magnitude (m)')
         setAxes(cb,0)
         title([tPre,'Knickpoint Locations'])
         colormap(gca,flipud(crameri('nuuk')))
-    
+
         savePlot(GI,gcf,'Channel')
     end
 catch
@@ -1058,14 +1074,14 @@ end
 
 %% Drainage Density Along Channels
 try
-    if isempty(CP.Channels.S)
+    if isempty(CP.Channels.S) || isempty(CP.Channels.S.x)
         warning('Cannot plot Drainage Density Along Channels; no channels exist')
     else
         f = figure;
         cm = colormap(crameri('bilbao',255));
         cm = cm(1:end,:);
         close(f);
-        
+
         figure('Name','Channel Drainage Density','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
         % Channel Drainage Density Map
         hold on
@@ -1073,17 +1089,17 @@ try
         plot(DP.Drainage_Basins.DBxy(:,1)./1000,DP.Drainage_Basins.DBxy(:,2)./1000,'-k','linewidth',.5)
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
         plotc(kmS,CP.Drainage_Density.DD*1000,'linewidth',5); colormap(cm)
-    
+
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Drainage Density (km^{-1})')
         setAxes(cb,0)
         box on
         title([tPre,'Drainage Density Along Channels'])
-    
+
         savePlot(GI,gcf,'Drainage_Density_Channels')
     end
 catch
@@ -1092,7 +1108,7 @@ end
 
 %% Basin Drainage Density
 try
-    if isempty(CP.Channels.S)
+    if isempty(CP.Channels.S) || isempty(CP.Channels.S.x)
         warning('Cannot plot Basin Drainage Density; no channels exist')
     else
         figure('Name','Basin Drainage Density','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
@@ -1102,27 +1118,27 @@ try
         imageschs(GP.DEM,CP.Drainage_Density.BasinDD*1000,'colormap',flipud(crameri('acton',255)),'tickstokm',true)
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
         plot(kmS,'-k','linewidth',blw)
-    
+
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Total Basin Drainage Density (km^{-1})')
         setAxes(cb,0)
         title([tPre,sprintf('Total Basin\nDrainage Density')])
-    
+
         % Max Basin Drainage Density Map
         subplot(1,2,2)
         hold on
         imageschs(GP.DEM,CP.Drainage_Density.MaxDD*1000,'colormap',flipud(crameri('oslo',255)),'tickstokm',true)
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
         plot(kmS,'-k','linewidth',blw)
-    
+
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Max Basin Drainage Density (km^{-1})')
         setAxes(cb,0)
@@ -1135,7 +1151,7 @@ end
 
 %% Channel Conformities
 try
-    if isempty(CP.Channels.S)
+    if isempty(CP.Channels.S) || isempty(CP.Channels.S.x)
         warning('Cannot plot Channel Conformity; no channels exist')
     else
         figure('Name','Channel Conformity','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
@@ -1144,42 +1160,42 @@ try
         imageschs(GP.DEM,CP.Conformity.Filtered_Topography,'colormap',demcmap(GP.DEM.Z),'tickstokm',true)
         plot(kmS,'-k','linewidth',blw)
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
-    
+
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Elevation (m)')
         setAxes(cb,0)
         title([tPre,'Filtered Topography'])
-    
+
         subplot(2,2,3)
         hold on
         imageschs(GP.DEM,CP.Conformity.Mean_Basin_Conformity_Map,'colormap',(crameri('acton',255)),'tickstokm',true)
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
         plot(kmS,'-k','linewidth',blw)
-    
+
         xlabel('X (km)')
         ylabel('Y (km)')
         setAxes(gca,fs)
-    
+
         cb = colorbar;
         ylabel(cb,'Conformity')
         setAxes(cb,0)
         title([tPre,sprintf('Mean Basin Conformity\n(Total Conformity = %.2f)',CP.Conformity.Mean_Total_Conformity)])
-    
+
         subplot(2,2,[2,4])
         hold on
         imageschs(GP.DEM,[],'colormap',[.8 .8 .8],'colorbar',false,'tickstokm',true)
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k')
-    
+
         for i = 1:length(CP.Conformity.Segment_Information)
             xx = [CP.Conformity.Segment_Information(i).X,CP.Conformity.Segment_Information(i).X];
             yy = [CP.Conformity.Segment_Information(i).Y,CP.Conformity.Segment_Information(i).Y];
             zz = zeros(size(xx));
             cc = ones(size(xx))*CP.Conformity.Segment_Information(i).Conformity;
-    
+
             surf(xx./1000,yy./1000,zz,cc,'edgecolor','interp','facecolor','none','linewidth',3)
             quiver(CP.Conformity.Segment_Information(i).LongWavelength_EndPoints(end,1)/1000,...
                 CP.Conformity.Segment_Information(i).LongWavelength_EndPoints(end,2)/1000,...
@@ -1195,20 +1211,20 @@ try
         setAxes(cb,0)
         title([tPre,'Segment Conformity'])
         box on
-    
+
         savePlot(GI,gcf,'Basin_Conformity')
     end
 catch
     warning('Could not plot Channel Conformity')
 end
-    
+
 %% Channel Concavity
 try
-    if isempty(CP.Channels.S)
+    if isempty(CP.Channels.S) || isempty(CP.Channels.S.x)
         warning('Cannot plot Channel Concavity; no channels exist')
     else
         figure('Name','Concavity','units','normalized','outerposition',[0 0 1 1],'visible',visPlots)
-    
+
         if size(CP.Channel_Concavity.Concavity_Streams,1) == 0
             useBasinIs = [];
         else
@@ -1222,7 +1238,7 @@ try
             nonNaNIs(t==1) = [];
             asLengths(t==1) = [];
             IL = sortrows([nonNaNIs;asLengths]',2,'descend');
-    
+
             if length(nonNaNIs) <= 4
                 useBasinIs = length(nonNaNIs);
             else
@@ -1262,7 +1278,7 @@ try
             axis square
             useBasinIDs = [useBasinIDs;CP.Channel_Concavity.Concavity_BasinIDs(useBasinIs(i))];
         end
-    
+
         % Concavity Basin Map
         subplot(2,4,[3,4,7,8])
         hold on
@@ -1271,7 +1287,7 @@ try
         catch
             warning('No Concavity values available - decrease the drainage area threshold.');
         end
-    
+
         plot(GP.boundaryXY(:,1)./1000,GP.boundaryXY(:,2)./1000,'-k','linewidth',.5)
         xlabel('X (km)')
         ylabel('Y (km)')
@@ -1302,7 +1318,7 @@ try
 catch
     warning('Could not plot Channel Concavity')
 end
-    
+
 %% Chi Total Results
 if sum(~isnan(CP.Chi.Total_Chi.Chi))>0
     try

@@ -873,119 +873,117 @@ kn_ID_BID_XY_Dist_DZ = DrainageVolc_Find_Knickpoints(DEM,DB,channelThreshold,pac
 DV_Res.ChannelParams.Channels.Knickpoint_ID_BID_XY_StreamDist_DZ = kn_ID_BID_XY_Dist_DZ;
 
 %% Divide Metrics
-if ~pack.Analyze_Divides
-    DV_Res.DivideParams = [];
-else
-    if pack.verbose > 0
-        disp('Calculating Divide Metrics...')
-    end
-    % Collect divides
-    if isempty(S)
+if pack.verbose > 0
+    disp('Calculating Divide Metrics...')
+end
+% Collect divides
+if isempty(S) || isempty(S.x) || ~pack.Analyze_Divides
+    if isempty(S) || isempty(S.x)
         warning('IGNORING DIVIDES SINCE NO CHANNELS FOUND')
-        DV_Res.DivideParams.Divide_Topo = [];
-        DV_Res.DivideParams.Divide_ReliefDistance = [];
-        DV_Res.DivideParams.Divide_AsymmetryIndex = [];
-        DV_Res.DivideParams.DAI_Gamma = [];
-        DV_Res.DivideParams.DAI_Gamma_Corrected = [];
-        DV_Res.DivideParams.Divide_TotalChiDifference = [];
-        DV_Res.DivideParams.Divide_BasinChiDifference = [];
-        DV_Res.DivideParams.Junction_X_Y_C_Z_D_A = [];
-        DV_Res.DivideParams.VerticalDistance = [];
-    else
-        DVD_Topo = DIVIDEobj(FD,S,'type','topo');
-        DVD_Topo = cleanedges(DVD_Topo,FD);
-        DVD_Topo = sort(DVD_Topo);
-        DVD_Topo = divorder(DVD_Topo);
-        
-        % Order divides and find their roots
-        [X_Topo,Y_Topo] = ind2coord(DVD_Topo,DVD_Topo.IX(1:end-1));
-        
-        Divide_Topo.DVD = DVD_Topo;
-        Divide_Topo.X = X_Topo;
-        Divide_Topo.Y = Y_Topo;
-        DV_Res.DivideParams.Divide_Topo = Divide_Topo;
-        
-        % Calculate Divide Asymmetry Index
-        if pack.verbose > 0
-            disp('   Divide Asymmetry Index (DAI)...')
-        end
-        vertDist = vertdistance2stream(FD,S,DEM);
-        vertDist.Z(isinf(vertDist.Z)) = NaN;
-        
-        [pp,qq] = getvalue(DVD_Topo,vertDist);
-        reliefDistance = abs(diff(abs([pp,qq]),1,2));
-        asymIndex = reliefDistance./sum([pp,qq],2);
-        asymIndex(asymIndex<0) = 0;
-        asymIndex(isinf(asymIndex)) = NaN;
-        
-        DV_Res.DivideParams.Divide_ReliefDistance = reliefDistance;
-        DV_Res.DivideParams.Divide_AsymmetryIndex = asymIndex;
-    
-        % Calculate DAI integral
-        if pack.verbose > 0
-            disp('   DAI Integral (Gamma)...')
-        end
-    
-        tmp = asymIndex;
-        tmp(DVD_Topo.order < pack.Divide_Order_Cutoff) = NaN;
-        tmp(isnan(tmp)) = [];
-    
-        asBins = 0:pack.DAI_Integral_BinWidth:1;
-        [DAI_PDF,~] = histcounts(tmp,asBins,'Normalization','pdf');
-        gamma = trapz(pack.DAI_Integral_BinWidth,DAI_PDF);
-        gammaStruct.PDF = DAI_PDF;
-        gammaStruct.Bins = asBins;
-        gammaStruct.Bin_Midpoints = asBins(1:end-1)+pack.DAI_Integral_BinWidth/2;
-        gammaStruct.Gamma = gamma;
-    
-        DV_Res.DivideParams.DAI_Gamma = gammaStruct;
-    
-        % Corrected DAI integral (with no 1s)
-        tmp(tmp==1) = [];
-        asBins = 0:pack.DAI_Integral_BinWidth:1;
-        [DAI_PDF,~] = histcounts(tmp,asBins,'Normalization','pdf');
-        gamma = trapz(pack.DAI_Integral_BinWidth,DAI_PDF);
-        gammaStruct2.PDF = DAI_PDF;
-        gammaStruct2.Bins = asBins;
-        gammaStruct2.Bin_Midpoints = asBins(1:end-1)+pack.DAI_Integral_BinWidth/2;
-        gammaStruct2.Gamma = gamma;
-    
-        DV_Res.DivideParams.DAI_Gamma_Corrected = gammaStruct2;
-    
-        % Calculate Chi differences across the divide
-        if pack.verbose > 0
-            disp('   Chi differences...')
-        end
-        try
-            [pp,qq] = getvalue(DVD_Topo,Total_Chi_Class.Upstream_Chi);
-            totalChiDifference = abs(diff(abs([pp,qq]),1,2));
-        catch
-            totalChiDifference = NaN;
-        end
-        DV_Res.DivideParams.Divide_TotalChiDifference = totalChiDifference;
-    
-        try
-            [pp,qq] = getvalue(DVD_Topo,Individual_Chi_Class.Upstream_Chi);
-            basinChiDifference = abs(diff(abs([pp,qq]),1,2));
-        catch
-            basinChiDifference = NaN;
-        end
-        DV_Res.DivideParams.Divide_BasinChiDifference = basinChiDifference;
-        
-        % Determine Divide Connectivity
-        if pack.verbose > 0    
-            disp('   Divide Connectivity...')
-        end
-        try
-            [CJ,CJ_x,CJ_y] = jctcon(DVD_Topo);
-            Junction_X_Y_C_Z_D_A = DrainageVolc_Collect_JunctionStats(DEM,DVD_Topo,asymIndex,CJ,CJ_x,CJ_y);
-        catch er
-            Junction_X_Y_C_Z_D_A = [NaN,NaN,NaN,NaN,NaN,NaN];
-        end
-        
-        DV_Res.DivideParams.Junction_X_Y_C_Z_D_A = Junction_X_Y_C_Z_D_A;
-        DV_Res.DivideParams.VerticalDistance = vertDist;
     end
+    DV_Res.DivideParams.Divide_Topo = [];
+    DV_Res.DivideParams.Divide_ReliefDistance = [];
+    DV_Res.DivideParams.Divide_AsymmetryIndex = [];
+    DV_Res.DivideParams.DAI_Gamma = [];
+    DV_Res.DivideParams.DAI_Gamma_Corrected = [];
+    DV_Res.DivideParams.Divide_TotalChiDifference = [];
+    DV_Res.DivideParams.Divide_BasinChiDifference = [];
+    DV_Res.DivideParams.Junction_X_Y_C_Z_D_A = [];
+    DV_Res.DivideParams.VerticalDistance = [];
+else
+    DVD_Topo = DIVIDEobj(FD,S,'type','topo');
+    DVD_Topo = cleanedges(DVD_Topo,FD);
+    DVD_Topo = sort(DVD_Topo);
+    DVD_Topo = divorder(DVD_Topo);
+    
+    % Order divides and find their roots
+    [X_Topo,Y_Topo] = ind2coord(DVD_Topo,DVD_Topo.IX(1:end-1));
+    
+    Divide_Topo.DVD = DVD_Topo;
+    Divide_Topo.X = X_Topo;
+    Divide_Topo.Y = Y_Topo;
+    DV_Res.DivideParams.Divide_Topo = Divide_Topo;
+    
+    % Calculate Divide Asymmetry Index
+    if pack.verbose > 0
+        disp('   Divide Asymmetry Index (DAI)...')
+    end
+    vertDist = vertdistance2stream(FD,S,DEM);
+    vertDist.Z(isinf(vertDist.Z)) = NaN;
+    
+    [pp,qq] = getvalue(DVD_Topo,vertDist);
+    reliefDistance = abs(diff(abs([pp,qq]),1,2));
+    asymIndex = reliefDistance./sum([pp,qq],2);
+    asymIndex(asymIndex<0) = 0;
+    asymIndex(isinf(asymIndex)) = NaN;
+    
+    DV_Res.DivideParams.Divide_ReliefDistance = reliefDistance;
+    DV_Res.DivideParams.Divide_AsymmetryIndex = asymIndex;
+
+    % Calculate DAI integral
+    if pack.verbose > 0
+        disp('   DAI Integral (Gamma)...')
+    end
+
+    tmp = asymIndex;
+    tmp(DVD_Topo.order < pack.Divide_Order_Cutoff) = NaN;
+    tmp(isnan(tmp)) = [];
+
+    asBins = 0:pack.DAI_Integral_BinWidth:1;
+    [DAI_PDF,~] = histcounts(tmp,asBins,'Normalization','pdf');
+    gamma = trapz(pack.DAI_Integral_BinWidth,DAI_PDF);
+    gammaStruct.PDF = DAI_PDF;
+    gammaStruct.Bins = asBins;
+    gammaStruct.Bin_Midpoints = asBins(1:end-1)+pack.DAI_Integral_BinWidth/2;
+    gammaStruct.Gamma = gamma;
+
+    DV_Res.DivideParams.DAI_Gamma = gammaStruct;
+
+    % Corrected DAI integral (with no 1s)
+    tmp(tmp==1) = [];
+    asBins = 0:pack.DAI_Integral_BinWidth:1;
+    [DAI_PDF,~] = histcounts(tmp,asBins,'Normalization','pdf');
+    gamma = trapz(pack.DAI_Integral_BinWidth,DAI_PDF);
+    gammaStruct2.PDF = DAI_PDF;
+    gammaStruct2.Bins = asBins;
+    gammaStruct2.Bin_Midpoints = asBins(1:end-1)+pack.DAI_Integral_BinWidth/2;
+    gammaStruct2.Gamma = gamma;
+
+    DV_Res.DivideParams.DAI_Gamma_Corrected = gammaStruct2;
+
+    % Calculate Chi differences across the divide
+    if pack.verbose > 0
+        disp('   Chi differences...')
+    end
+    try
+        [pp,qq] = getvalue(DVD_Topo,Total_Chi_Class.Upstream_Chi);
+        totalChiDifference = abs(diff(abs([pp,qq]),1,2));
+    catch
+        totalChiDifference = NaN;
+    end
+    DV_Res.DivideParams.Divide_TotalChiDifference = totalChiDifference;
+
+    try
+        [pp,qq] = getvalue(DVD_Topo,Individual_Chi_Class.Upstream_Chi);
+        basinChiDifference = abs(diff(abs([pp,qq]),1,2));
+    catch
+        basinChiDifference = NaN;
+    end
+    DV_Res.DivideParams.Divide_BasinChiDifference = basinChiDifference;
+    
+    % Determine Divide Connectivity
+    if pack.verbose > 0    
+        disp('   Divide Connectivity...')
+    end
+    try
+        [CJ,CJ_x,CJ_y] = jctcon(DVD_Topo);
+        Junction_X_Y_C_Z_D_A = DrainageVolc_Collect_JunctionStats(DEM,DVD_Topo,asymIndex,CJ,CJ_x,CJ_y);
+    catch er
+        Junction_X_Y_C_Z_D_A = [NaN,NaN,NaN,NaN,NaN,NaN];
+    end
+    
+    DV_Res.DivideParams.Junction_X_Y_C_Z_D_A = Junction_X_Y_C_Z_D_A;
+    DV_Res.DivideParams.VerticalDistance = vertDist;
 end
 
 %% Save All Results
