@@ -594,7 +594,22 @@ DV_Res.TopoParams.Roughness = roughnessVals;
 if pack.verbose > 0
     disp('Calculating Drainage Metrics...')
 end
-FD = FLOWobj(DEM,'preprocess','none');
+% FD = FLOWobj(DEM,'preprocess','none');
+
+% This method should remove streams that run along the edifice's boundary
+FD0 = FLOWobj(DEM0,'preprocess','none');
+
+[ZZ0,XX0,YY0] = GRIDobj2mat(DEM0);
+[ZZ,XX,YY] = GRIDobj2mat(DEM);
+[ii,jj] = find(~isnan(ZZ));
+mZ = zeros(size(ZZ0));
+for i = 1:length(ii)
+    xi = find(XX0==XX(jj(i)),1);
+    yi = find(YY0==YY(ii(i)),1);
+    mZ(yi,xi) = 1;
+end
+mDEM = GRIDobj(XX0,YY0,mZ==1);
+FD = crop(FD0,mDEM);
 
 DV_Res.DrainageParams.Hydrology.FD = FD;
 
