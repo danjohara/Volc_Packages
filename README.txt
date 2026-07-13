@@ -24,3 +24,6 @@ Nathan Childress (2023). bluewhitered (https://www.mathworks.com/matlabcentral/f
 Kringing:
 Wolfgang Schwangart (2010). https://github.com/wschwanghart/kriging
 
+movingstd / movingstd2:
+John D'Errico (2026). movingstd & movingstd2 (https://www.mathworks.com/matlabcentral/fileexchange/9428-movingstd-movingstd2), MATLAB Central File Exchange. Retrieved July 13, 2026.
+
