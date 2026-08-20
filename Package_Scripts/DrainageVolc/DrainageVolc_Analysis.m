@@ -517,7 +517,7 @@ DV_Res.GeographicParams.craterXY = craterXY;
 DV_Res.GeographicParams.maskXY = maskXY;
 
 %% Load and Cut DEM
-[DEM0,~,~,~,DEM,X,Y,Z] = Import_DEM(pack.tifFile,dx,1,boundaryXY,craterXY,maskXY,pack.verbose);
+[DEM0,~,~,~,DEM,X,Y,Z] = Import_DEM(pack.tifFile,dx,pack.fillDEM,boundaryXY,craterXY,maskXY,pack.verbose);
 [~,~] = meshgrid(X,Y);
 
 DV_Res.GeographicParams.DEM0 = DEM0;
@@ -847,6 +847,7 @@ DV_Res.ChannelParams.Conformity.Filtered_Topography = filteredDEM;
 if pack.verbose > 0
     disp('   Channel Concavity...')
 end
+% Issue here
 [topN_Ss,topN_S_Stats] = DrainageVolc_Collect_Stream_Concavity(tot_db_stats,DEM,A,DB,FD,topN_basinIDs,channelThreshold,pack.concavityType);
 
 DV_Res.ChannelParams.Channel_Concavity.Concavity_Streams = topN_Ss;
