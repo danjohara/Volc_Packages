@@ -41,46 +41,87 @@ function [DEM0,X0,Y0,Z0,DEM,X,Y,Z] = Import_DEM(tifFile,dx,fillDEM,boundaryXY,cr
         DEM0 = tifFile;
     end
 
-    V = 2;
-    try 
-        DEM0.refmat;
-    catch
-        V = 3;
+    % Determine if using TopoToolbox2 or TopoToolbox3
+    f = fieldnames(DEM0);
+    hasRefMat = 0;
+    for i = 1:length(f)
+        if strcmp(f{i},'refmat')
+            hasRefMat = 1;
+            break;
+        end
     end
 
-    if V==2 && isempty(DEM0.georef)
-        try
-            DEM0 = reproject2utm(DEM0,dx);
-        catch
-            warning('Cannot reproject DEM to UTM, assuming map is already in coordinates.')
-            DEM0 = resample(DEM0,dx);
-        end
-    elseif V==3 && isempty(DEM0.georef.ProjectedCRS)
-        try
-            DEM0 = reproject2utm(DEM0,dx);
-        catch
-            warning('Cannot reproject DEM to UTM, assuming map is already in coordinates.')
+    if hasRefMat % using TT2
+        V = 2;
+        if isempty(DEM0.georef) || strcmp(DEM0.georef.SpatialRef.CoordinateSystemType,'geographic')
+            try
+                DEM0 = reproject2utm(DEM0,dx);
+            catch
+                warning('Cannot reproject DEM to UTM, assuming map is already in coordinates.')
+                DEM0 = resample(DEM0,dx);
+            end
+        else
             DEM0 = resample(DEM0,dx);
         end
     else
-        DEM0 = resample(DEM0,dx);
-    end
+        V = 3;
+        f = fieldnames(DEM0.georef);
+        useGeo_Proj = 0;
+        for i = 1:length(f)
+            if strcmp(f{i},'GeographicCRS')
+                useGeo_Proj = 1;
+                break;
+            elseif strcmp(f{i},'ProjectedCRS')
+                useGeo_Proj = 2;
+                break;
+            end
+        end
 
-    % TopoToolbox 3 resampling does not always create uniformly-spaced
-    % grids, which 
-    if V==3 && (DEM0.wf(1,1) ~= DEM0.wf(2,2))
-        warning('Resample created non-uniform coordinates; re-interpolating.')
-        tmpDEM = DEM0;
-        [Z,x0,y0] = GRIDobj2mat(DEM0);
-        x1 = min(x0):dx:max(x0);
-        y1 = min(y0):dx:max(y0);
+        if useGeo_Proj == 1
+            try
+                DEM0 = reproject2utm(DEM0,dx);
+            catch
+                warning('Cannot reproject DEM to UTM, assuming map is already in coordinates.')
+                DEM0 = resample(DEM0,dx);
+            end
+        elseif useGeo_Proj == 2 && isempty(DEM0.georef.ProjectedCRS)
+            if ischar(tifFile)
+                warning('off','all')
+                DEM0 = GRIDobj(tifFile,'CoordinateSystemType','geographic');
+                warning('on','all')
+    
+                DEM0.Z(DEM0.Z<-20000) = NaN;
 
-        [X0,Y0] = meshgrid(x0,y0);
-        [X1,Y1] = meshgrid(x1,y1);
-        scInt = scatteredInterpolant(double(X0(:)),double(Y0(:)),double(Z(:)),'natural','none');
-        DEM0 = GRIDobj(X1,Y1,scInt(X1,Y1));
-        DEM0.georef.ProjectedCRS = tmpDEM.georef.ProjectedCRS;
+                try
+                    DEM0 = reproject2utm(DEM0,dx);
+                catch
+                    warning('Cannot reproject DEM to UTM, assuming map is already in coordinates.')
+                    DEM0 = resample(DEM0,dx);
+                end
+            else
+                error('Script interprets supplied GRIDobj as incorrectly referenced geographic data. If so, use TopoToolbox 2 or save file as a geotiff so it can be imported correctly.')
+            end
+        else
+            DEM0 = resample(DEM0,dx);
+        end
+
+        % TopoToolbox 3 resampling does not always create uniformly-spaced
+        % grids, which causes issues with other TT3 functions
+        if V==3 && (DEM0.wf(1,1) ~= DEM0.wf(2,2))
+            warning('Resample created non-uniform coordinates; re-interpolating.')
+            tmpDEM = DEM0;
+            [Z,x0,y0] = GRIDobj2mat(DEM0);
+            x1 = min(x0):dx:max(x0);
+            y1 = min(y0):dx:max(y0);
+    
+            [X0,Y0] = meshgrid(x0,y0);
+            [X1,Y1] = meshgrid(x1,y1);
+            scInt = scatteredInterpolant(double(X0(:)),double(Y0(:)),double(Z(:)),'natural','none');
+            DEM0 = GRIDobj(X1,Y1,scInt(X1,Y1));
+            DEM0.georef.ProjectedCRS = tmpDEM.georef.ProjectedCRS;
+        end
     end
+    DEM0.Z = double(DEM0.Z);
 
 %% Fill DEM
     DEM = DEM0;
@@ -127,9 +168,9 @@ function [DEM0,X0,Y0,Z0,DEM,X,Y,Z] = Import_DEM(tifFile,dx,fillDEM,boundaryXY,cr
     DEM = GRIDobj(XG0,YG0,newZ);
     DEM.georef = DEM0.georef;
 
-    if isfield(DEM0,'refmat')
+    if V == 2
         DEM.refmat = DEM0.refmat;
-    elseif isfield(DEM0,'wf')
+    elseif V == 3
         DEM.wf = DEM0.wf;
     end
     
